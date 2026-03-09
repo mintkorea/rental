@@ -18,7 +18,7 @@ BUILDING_ORDER = [
     "서울성모별관"
 ]
 
-# CSS 설정: 헤더 가독성 및 테이블 최적화
+# CSS 설정
 st.markdown("""
 <style>
     .main-title {
@@ -35,6 +35,14 @@ st.markdown("""
         padding-left: 5px;
         border-left: 5px solid #2E5077;
     }
+    .no-data-msg {
+        color: #666;
+        font-style: italic;
+        padding: 10px;
+        border: 1px dashed #ccc;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
     
     .custom-table {
         width: 100%;
@@ -48,7 +56,7 @@ st.markdown("""
         vertical-align: middle !important;
     }
     
-    /* 헤더: 흑백 배경에서도 글씨가 잘 보이도록 반전 대비 적용 */
+    /* 헤더: 중앙 정렬 및 고대비 색상 적용 */
     .custom-table th {
         background-color: #333333 !important;
         color: #ffffff !important;
@@ -56,13 +64,19 @@ st.markdown("""
         font-weight: bold;
     }
 
-    /* --- 열별 너비 재조정 --- */
+    /* --- 열별 너비 및 정렬 설정 --- */
+    /* 1. 날짜 */
     .custom-table th:nth-child(1), .custom-table td:nth-child(1) { width: 95px; text-align: center !important; }
+    /* 2. 강의실 */
     .custom-table th:nth-child(2), .custom-table td:nth-child(2) { width: 18%; text-align: left !important; padding-left: 8px !important; }
+    /* 3. 시작 & 4. 종료 */
     .custom-table th:nth-child(3), .custom-table td:nth-child(3),
     .custom-table th:nth-child(4), .custom-table td:nth-child(4) { width: 60px; text-align: center !important; white-space: nowrap; }
+    /* 5. 행사명 */
     .custom-table th:nth-child(5), .custom-table td:nth-child(5) { width: auto; text-align: left !important; padding-left: 8px !important; word-break: keep-all; }
+    /* 6. 관리부서 */
     .custom-table th:nth-child(6), .custom-table td:nth-child(6) { width: 18%; text-align: left !important; padding-left: 8px !important; }
+    /* 7. 상태 */
     .custom-table th:nth-child(7), .custom-table td:nth-child(7) { width: 80px; text-align: center !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -104,18 +118,19 @@ def get_processed_data(s_date, e_date):
                 if s_date <= curr_dt <= e_date:
                     py_wd = curr_dt.weekday()
                     server_wd = 1 if py_wd == 6 else py_wd + 2
-                    
                     if not allow_days or server_wd in allow_days:
                         row = item.copy()
                         row['actualDate'] = curr_dt
                         expanded_rows.append(row)
                 curr_dt += timedelta(days=1)
-                
         return pd.DataFrame(expanded_rows)
     except:
         return pd.DataFrame()
 
 df_raw = get_processed_data(start_selected, end_selected)
+
+# 4. 결과 표출
+selected_bu = st.sidebar.multiselect("조회할 건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
 if not df_raw.empty:
     df = df_raw[['actualDate','buNm','placeNm','startTime','endTime','eventNm','mgDeptNm','status']].copy()
@@ -123,32 +138,23 @@ if not df_raw.empty:
     df['상태'] = df['상태'].map({'Y': '예약확정', 'N': '신청대기'}).fillna('기타')
     df['건물명'] = df['건물명'].str.strip()
 
-    # --- 건물 순서 고정 로직 ---
-    # 데이터에 있는 건물 중 정의된 리스트에 있는 것만 필터링하거나, 
-    # 정의된 리스트를 기준으로 정렬 기준(Categorical) 설정
-    present_bu = [b for b in BUILDING_ORDER if b in df['건물명'].unique()]
-    # 정의되지 않은 건물이 데이터에 있다면 뒤에 붙여줌
-    others = [b for b in df['건물명'].unique() if b not in BUILDING_ORDER]
-    final_order = present_bu + others
-
-    selected_bu = st.sidebar.multiselect("조회할 건물", options=final_order, default=present_bu)
-
-    # 4. 건물별 출력 (정해진 순서대로)
     for bu in selected_bu:
+        st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
         bu_df = df[df['건물명'] == bu].sort_values(by=['날짜', '시작'])
+        
         if not bu_df.empty:
-            st.markdown(f'<div class="building-header">🏢 {bu} (총 {len(bu_df)}건)</div>', unsafe_allow_html=True)
             table_display = bu_df.drop(columns=['건물명']).reset_index(drop=True)
-            
             html_table = table_display.to_html(classes='custom-table', index=False, escape=False)
             st.markdown(html_table, unsafe_allow_html=True)
-            st.markdown("<br>", unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-    # 5. 엑셀 다운로드 (정렬 유지)
+    # 5. 엑셀 다운로드
     st.sidebar.markdown("---")
-    # 건물명을 Categorical로 변환하여 엑셀 저장 시에도 순서 유지
-    df['건물명'] = pd.Categorical(df['건물명'], categories=final_order, ordered=True)
-    final_view = df[df['건물명'].isin(selected_bu)].sort_values(by=['건물명', '날짜', '시작'])
+    final_view = df[df['건물명'].isin(selected_bu)].copy()
+    final_view['건물명'] = pd.Categorical(final_view['건물명'], categories=BUILDING_ORDER, ordered=True)
+    final_view = final_view.sort_values(by=['건물명', '날짜', '시작'])
     
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -161,4 +167,8 @@ if not df_raw.empty:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 else:
-    st.info("선택하신 기간 내에 예약 내역이 없습니다.")
+    # 데이터 자체가 없는 경우 모든 선택 건물에 대해 메시지 표시
+    for bu in selected_bu:
+        st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+    st.info("해당 기간에 전체 예약 데이터가 존재하지 않습니다.")
