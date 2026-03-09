@@ -18,7 +18,7 @@ BUILDING_ORDER = [
     "서울성모별관"
 ]
 
-# 2. CSS 설정 (PC용 표 디자인 유지 + 헤더 흑백 대비 및 중앙정렬)
+# 2. CSS 설정: 열 너비 정밀 조정
 st.markdown("""
 <style>
     .main-title { font-size: 26px !important; font-weight: bold; margin-bottom: 30px; }
@@ -26,9 +26,8 @@ st.markdown("""
         font-size: 22px !important; font-weight: bold; color: #2E5077;
         margin-top: 25px; margin-bottom: 10px; padding-left: 5px; border-left: 5px solid #2E5077;
     }
-    .no-data-msg {
-        color: #888; font-style: italic; padding: 10px; margin-bottom: 20px;
-    }
+    .no-data-msg { color: #888; font-style: italic; padding: 10px; margin-bottom: 20px; }
+    
     .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .custom-table th, .custom-table td { border: 1px solid #dee2e6; padding: 10px 6px !important; font-size: 14px; vertical-align: middle !important; }
     
@@ -38,13 +37,25 @@ st.markdown("""
         text-align: center !important; font-weight: bold;
     }
 
-    /* 열별 정렬 설정 */
-    .custom-table td:nth-child(1) { text-align: center !important; } /* 날짜 */
-    .custom-table td:nth-child(2) { text-align: left !important; padding-left: 8px !important; } /* 강의실 */
-    .custom-table td:nth-child(3), .custom-table td:nth-child(4) { text-align: center !important; } /* 시작/종료 */
-    .custom-table td:nth-child(5) { text-align: left !important; padding-left: 8px !important; word-break: keep-all; } /* 행사명 */
-    .custom-table td:nth-child(6) { text-align: left !important; padding-left: 8px !important; } /* 관리부서 */
-    .custom-table td:nth-child(7) { text-align: center !important; } /* 상태 */
+    /* --- [열 너비 세부 설정] --- */
+    /* 1. 날짜: 데이터에 맞춘 좁은 너비 */
+    .custom-table th:nth-child(1), .custom-table td:nth-child(1) { width: 90px; text-align: center !important; } 
+    
+    /* 2. 강의실: 중간 너비 */
+    .custom-table th:nth-child(2), .custom-table td:nth-child(2) { width: 15%; text-align: left !important; padding-left: 8px !important; } 
+    
+    /* 3. 시작 & 4. 종료: 데이터만 들어갈 정도의 최소 너비 */
+    .custom-table th:nth-child(3), .custom-table td:nth-child(3),
+    .custom-table th:nth-child(4), .custom-table td:nth-child(4) { width: 55px; text-align: center !important; white-space: nowrap; } 
+    
+    /* 5. 행사명: 가장 넓게 (강의실+관리부서 비중 반영) */
+    .custom-table th:nth-child(5), .custom-table td:nth-child(5) { width: auto; text-align: left !important; padding-left: 8px !important; word-break: break-all; } 
+    
+    /* 6. 관리부서: 중간 너비 */
+    .custom-table th:nth-child(6), .custom-table td:nth-child(6) { width: 15%; text-align: left !important; padding-left: 8px !important; } 
+    
+    /* 7. 상태: 최소 너비 */
+    .custom-table th:nth-child(7), .custom-table td:nth-child(7) { width: 75px; text-align: center !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,7 +67,7 @@ col1, col2 = st.sidebar.columns(2)
 start_selected = col1.date_input("시작일", value=date(2026, 3, 10))
 end_selected = col2.date_input("종료일", value=date(2026, 3, 14))
 
-# 4. 데이터 추출 로직 (휴대폰용 소스 참조 방식)
+# 4. 데이터 추출 로직 (참조된 정확한 추출 방식)
 @st.cache_data(ttl=300)
 def get_processed_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -71,17 +82,12 @@ def get_processed_data(s_date, e_date):
         for item in raw_list:
             item_start = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             item_end = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
-            # [참조 로직] 요일 리스트 생성 (월:1 ~ 일:7)
             allow_days = [d.strip() for d in str(item.get('allowDay', '')).split(',') if d.strip()]
 
             curr_dt = item_start
             while curr_dt <= item_end:
-                # 사용자가 선택한 기간 내의 날짜만 처리
                 if s_date <= curr_dt <= e_date:
-                    # [참조 로직] 요일 계산 및 필터링
                     target_weekday = str(curr_dt.weekday() + 1)
-                    
                     is_today = (item['startDt'] == item['endDt'])
                     if is_today or (target_weekday in allow_days):
                         expanded_rows.append({
@@ -99,17 +105,17 @@ def get_processed_data(s_date, e_date):
     except:
         return pd.DataFrame()
 
-# 데이터 실행
+# 데이터 로드
 df = get_processed_data(start_selected, end_selected)
 
-# 5. 결과 출력 (PC용 표 형태)
+# 5. 결과 출력
 selected_bu = st.sidebar.multiselect("조회할 건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
 for bu in selected_bu:
     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
     
     if not df.empty:
-        # [참조 로직] 건물명 공백 제거 후 매칭
+        # 건물명 공백 제거 매칭 로직 적용
         target_bu_clean = bu.replace(" ", "")
         bu_df = df[df['건물명'].str.replace(" ", "").str.contains(target_bu_clean, na=False)].copy()
         
@@ -124,21 +130,19 @@ for bu in selected_bu:
         st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-# 6. 엑셀 다운로드 (사이드바)
+# 6. 엑셀 다운로드
 if not df.empty:
     st.sidebar.markdown("---")
-    download_df = df[df['건물명'].isin(selected_bu)].copy()
-    if not download_df.empty:
-        download_df['건물명'] = pd.Categorical(download_df['건물명'], categories=BUILDING_ORDER, ordered=True)
-        download_df = download_df.sort_values(['건물명', '날짜', '시작'])
-        
+    # 선택된 건물 기준으로 정렬하여 엑셀 생성
+    final_view = df[df['건물명'].isin([b for b in df['건물명'].unique() if b.replace(" ","") in [s.replace(" ","") for s in selected_bu]])].copy()
+    if not final_view.empty:
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            download_df.to_excel(writer, index=False)
+            final_view.to_excel(writer, index=False)
         
         st.sidebar.download_button(
             label="📥 현재 리스트 엑셀 저장",
             data=output.getvalue(),
-            file_name=f"대관현황_{date.today()}.xlsx",
+            file_name=f"성의교정_대관현황_{date.today()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
