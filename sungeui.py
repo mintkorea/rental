@@ -18,13 +18,21 @@ BUILDING_ORDER = [
     "서울성모별관"
 ]
 
-# 2. CSS 설정: 열 너비 정밀 조정
+# 2. CSS 설정 (여백 및 열 너비 조정)
 st.markdown("""
 <style>
-    .main-title { font-size: 26px !important; font-weight: bold; margin-bottom: 30px; }
+    /* 상단 여백 최소화 */
+    .block-container { padding-top: 2rem !important; }
+    
+    .main-title { 
+        font-size: 26px !important; 
+        font-weight: bold; 
+        margin-bottom: 20px; 
+        color: #1E3A5F;
+    }
     .building-header {
         font-size: 22px !important; font-weight: bold; color: #2E5077;
-        margin-top: 25px; margin-bottom: 10px; padding-left: 5px; border-left: 5px solid #2E5077;
+        margin-top: 10px; margin-bottom: 10px; padding-left: 5px; border-left: 5px solid #2E5077;
     }
     .no-data-msg { color: #888; font-style: italic; padding: 10px; margin-bottom: 20px; }
     
@@ -37,29 +45,16 @@ st.markdown("""
         text-align: center !important; font-weight: bold;
     }
 
-    /* --- [열 너비 세부 설정] --- */
-    /* 1. 날짜: 데이터에 맞춘 좁은 너비 */
+    /* --- [열 너비 설정] --- */
     .custom-table th:nth-child(1), .custom-table td:nth-child(1) { width: 90px; text-align: center !important; } 
-    
-    /* 2. 강의실: 중간 너비 */
     .custom-table th:nth-child(2), .custom-table td:nth-child(2) { width: 15%; text-align: left !important; padding-left: 8px !important; } 
-    
-    /* 3. 시작 & 4. 종료: 데이터만 들어갈 정도의 최소 너비 */
     .custom-table th:nth-child(3), .custom-table td:nth-child(3),
     .custom-table th:nth-child(4), .custom-table td:nth-child(4) { width: 55px; text-align: center !important; white-space: nowrap; } 
-    
-    /* 5. 행사명: 가장 넓게 (강의실+관리부서 비중 반영) */
     .custom-table th:nth-child(5), .custom-table td:nth-child(5) { width: auto; text-align: left !important; padding-left: 8px !important; word-break: break-all; } 
-    
-    /* 6. 관리부서: 중간 너비 */
     .custom-table th:nth-child(6), .custom-table td:nth-child(6) { width: 15%; text-align: left !important; padding-left: 8px !important; } 
-    
-    /* 7. 상태: 최소 너비 */
     .custom-table th:nth-child(7), .custom-table td:nth-child(7) { width: 75px; text-align: center !important; }
 </style>
 """, unsafe_allow_html=True)
-
-st.markdown('<div class="main-title">🏫 성의교정 시설 대관 실시간 현황</div>', unsafe_allow_html=True)
 
 # 3. 사이드바 설정
 st.sidebar.header("🔍 기간 설정")
@@ -67,7 +62,15 @@ col1, col2 = st.sidebar.columns(2)
 start_selected = col1.date_input("시작일", value=date(2026, 3, 10))
 end_selected = col2.date_input("종료일", value=date(2026, 3, 14))
 
-# 4. 데이터 추출 로직 (참조된 정확한 추출 방식)
+# 메인 타이틀 동적 생성 로직
+if start_selected == end_selected:
+    title_date = start_selected.strftime('%Y-%m-%d')
+else:
+    title_date = f"{start_selected.strftime('%Y-%m-%d')} ~ {end_selected.strftime('%Y-%m-%d')}"
+
+st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황 ({title_date})</div>', unsafe_allow_html=True)
+
+# 4. 데이터 추출 로직
 @st.cache_data(ttl=300)
 def get_processed_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -105,7 +108,6 @@ def get_processed_data(s_date, e_date):
     except:
         return pd.DataFrame()
 
-# 데이터 로드
 df = get_processed_data(start_selected, end_selected)
 
 # 5. 결과 출력
@@ -115,7 +117,6 @@ for bu in selected_bu:
     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
     
     if not df.empty:
-        # 건물명 공백 제거 매칭 로직 적용
         target_bu_clean = bu.replace(" ", "")
         bu_df = df[df['건물명'].str.replace(" ", "").str.contains(target_bu_clean, na=False)].copy()
         
@@ -133,13 +134,11 @@ for bu in selected_bu:
 # 6. 엑셀 다운로드
 if not df.empty:
     st.sidebar.markdown("---")
-    # 선택된 건물 기준으로 정렬하여 엑셀 생성
-    final_view = df[df['건물명'].isin([b for b in df['건물명'].unique() if b.replace(" ","") in [s.replace(" ","") for s in selected_bu]])].copy()
+    final_view = df.copy()
     if not final_view.empty:
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             final_view.to_excel(writer, index=False)
-        
         st.sidebar.download_button(
             label="📥 현재 리스트 엑셀 저장",
             data=output.getvalue(),
