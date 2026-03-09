@@ -12,7 +12,7 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 모바일 부서명 2줄 제한 및 자동 크기 조절
+# 2. CSS 설정
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -27,32 +27,29 @@ st.markdown("""
     .custom-table th { 
         background-color: #444 !important; color: white !important; 
         text-align: center !important; padding: 8px 2px; font-size: 13px;
-        border: 1px solid #333;
     }
     
     .custom-table td { 
         background-color: white !important; color: black !important;
         border: 1px solid #eee; padding: 5px 2px !important; 
-        font-size: 12.5px; 
-        vertical-align: middle; text-align: center;
+        font-size: 12.5px; vertical-align: middle; text-align: center;
         line-height: 1.2;
     }
 
-    /* [너비 조정] 부서와 장소 비중 최적화 */
+    /* 너비 비율 */
     .w-date   { width: 9%; }   
     .w-time   { width: 10%; }  
     .w-place  { width: 19%; }  
     .w-event  { width: 37%; }  
-    .w-dept   { width: 17%; }  /* 부서 셀 */
+    .w-dept   { width: 17%; }  
     .w-status { width: 8%; }   
 
-    /* 부서명/장소명 텍스트 자동 줄바꿈 및 크기 조절 */
-    .cell-shrink {
+    /* 부서명/장소명 텍스트 처리 */
+    .cell-content {
         display: -webkit-box;
-        -webkit-line-clamp: 2; /* 최대 2줄까지만 허용 */
+        -webkit-line-clamp: 2; /* 2줄 제한 */
         -webkit-box-orient: vertical;
         overflow: hidden;
-        text-overflow: ellipsis;
         word-break: break-all;
         white-space: normal;
     }
@@ -60,13 +57,13 @@ st.markdown("""
     @media (max-width: 768px) {
         .custom-table th, .custom-table td { font-size: 10px !important; padding: 4px 1px !important; }
         .pc-time { display: none; }
-        .mobile-time { display: block; font-size: 9px; line-height: 1.1; }
+        .mobile-time { display: block; font-size: 9px; line-height: 1.0; }
         
-        /* 모바일 부서명 강제 폰트 축소 */
-        .dept-text {
-            font-size: 9px !important; 
+        /* [핵심] 부서명과 장소명의 폰트를 더 줄여서 2줄 안에 최대한 수용 */
+        .shrink-text {
+            font-size: 8.5px !important; /* 텍스트 크기 강제 축소 */
             line-height: 1.0 !important;
-            max-height: 2.2em; /* 2줄 높이로 제한 */
+            letter-spacing: -0.5px; /* 자간 축소 */
         }
         
         .w-date { width: 11%; }
@@ -81,10 +78,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 사이드바 설정 (오늘 날짜 2026-03-10 기본 로드)
+# 3. 사이드바 (초기값 오늘 날짜 고정)
 st.sidebar.header("🔍 조회 설정")
-start_selected = st.sidebar.date_input("시작일", value=now_today, key="rental_final_v2")
-end_selected = st.sidebar.date_input("종료일", value=now_today, key="rental_end_v2")
+start_selected = st.sidebar.date_input("시작일", value=now_today, key="rental_v3_start")
+end_selected = st.sidebar.date_input("종료일", value=now_today, key="rental_v3_end")
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
@@ -120,19 +117,17 @@ for bu in selected_bu:
                 time_mobile = f'<div class="mobile-time"><b>{r["startTime"]}</b><br>{r["endTime"]}</div>'
                 
                 html += f'<tr><td class="w-date">{r["startDt"][5:]}</td>'
-                # 장소명: 2줄 제한 및 축소 적용
-                html += f'<td class="w-place"><div class="cell-shrink">{r["placeNm"]}</div></td>'
+                # 장소/부서 공통으로 축소 로직 적용
+                html += f'<td class="w-place"><div class="cell-content shrink-text">{r["placeNm"]}</div></td>'
                 html += f'<td class="w-time">{time_pc}{time_mobile}</td>'
-                # 행사명: 왼쪽 정렬 및 줄바꿈 유지
-                html += f'<td style="text-align:left; padding-left:5px; white-space:normal; word-break:break-all;">{r["eventNm"]}</td>'
-                # 부서명: 모바일에서 2줄 제한 및 폰트 축소 강제 적용
-                html += f'<td class="w-dept"><div class="cell-shrink dept-text">{r["mgDeptNm"]}</div></td>'
+                html += f'<td style="text-align:left; padding-left:5px; white-space:normal; font-size:inherit;">{r["eventNm"]}</td>'
+                html += f'<td class="w-dept"><div class="cell-content shrink-text">{r["mgDeptNm"]}</div></td>'
                 html += f'<td class="w-status">{"확정" if r["status"]=="Y" else "대기"}</td></tr>'
             
             html += '</tbody></table>'
             st.markdown(html, unsafe_allow_html=True)
         else:
-            st.markdown('<p style="color:#999; font-size:12px; padding-left:5px;">내역 없음</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#999; font-size:11px; padding-left:5px;">내역 없음</p>', unsafe_allow_html=True)
 
 # 6. 엑셀 저장
 if not df.empty:
@@ -140,4 +135,4 @@ if not df.empty:
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
-    st.sidebar.download_button("📥 결과 엑셀 저장", output.getvalue(), f"rental_{start_selected}.xlsx")
+    st.sidebar.download_button("📥 엑셀 저장", output.getvalue(), f"rental_{start_selected}.xlsx")
