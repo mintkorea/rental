@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import requests
 import pandas as pd
 from io import BytesIO
@@ -8,23 +7,62 @@ from datetime import datetime, date, timedelta
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
+# 고정된 건물 순서
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. 사이드바 및 날짜 설정
-st.sidebar.header("🔍 설정")
-start_selected = st.sidebar.date_input("시작일", value=date.today())
-end_selected = st.sidebar.date_input("종료일", value=date.today())
-selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
+# 2. CSS 설정: 다크 모드 대비 및 모바일 최적화
+st.markdown("""
+<style>
+    /* 전체 배경 및 텍스트 색상 강제 지정 (다크 모드 방지) */
+    .stApp { background-color: white; }
+    
+    .main-title { font-size: 24px !important; font-weight: bold; margin-bottom: 20px; color: #1E3A5F; }
+    .building-header {
+        font-size: 20px !important; font-weight: bold; color: #2E5077;
+        margin-top: 30px; margin-bottom: 10px; padding-left: 10px; border-left: 5px solid #2E5077;
+    }
+    
+    /* 테이블 스타일: PC/모바일 공통 */
+    .table-container { width: 100%; overflow-x: auto; } /* 가로 스크롤 허용 */
+    .custom-table { width: 100%; border-collapse: collapse; min-width: 600px; } /* 최소 너비 확보 */
+    
+    .custom-table th { 
+        background-color: #333333 !important; color: #ffffff !important; 
+        text-align: center !important; font-weight: bold; padding: 12px 4px; border: 1px solid #444;
+    }
+    .custom-table td { 
+        background-color: #ffffff !important; color: #000000 !important; /* 글자색 검정 고정 */
+        border: 1px solid #dee2e6; padding: 10px 6px !important; 
+        font-size: 14px; vertical-align: middle !important; 
+    }
 
-# 타이틀 생성
-title_date = start_selected.strftime('%Y-%m-%d') if start_selected == end_selected else f"{start_selected.strftime('%Y-%m-%d')} ~ {end_selected.strftime('%Y-%m-%d')}"
-st.markdown(f"""
-    <div style="padding-top: 10px; margin-bottom: 20px;">
-        <h2 style="color: #1E3A5F; font-size: 26px; font-weight: bold;">🏫 성의교정 대관 현황 ({title_date})</h2>
-    </div>
+    /* 열 너비 설정 */
+    .col-date { width: 100px; text-align: center !important; }
+    .col-place { width: 15%; text-align: left !important; }
+    .col-time { width: 130px; text-align: center !important; }
+    .col-event { width: auto; text-align: left !important; min-width: 150px; } /* 행사명 최소 너비 */
+    .col-dept { width: 15%; text-align: left !important; }
+    .col-status { width: 80px; text-align: center !important; }
+
+    /* 모바일 전용 폰트 조절 */
+    @media (max-width: 768px) {
+        .custom-table td, .custom-table th { font-size: 12px !important; }
+    }
+</style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 추출 로직
+# 3. 사이드바 설정 (달력 기본값: Today)
+st.sidebar.header("🔍 설정")
+today_val = date.today()
+start_selected = st.sidebar.date_input("시작일", value=today_val)
+end_selected = st.sidebar.date_input("종료일", value=today_val)
+selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
+
+# 타이틀 표시
+title_date = start_selected.strftime('%Y-%m-%d') if start_selected == end_selected else f"{start_selected.strftime('%Y-%m-%d')} ~ {end_selected.strftime('%Y-%m-%d')}"
+st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황 ({title_date})</div>', unsafe_allow_html=True)
+
+# 4. 데이터 추출 로직
 @st.cache_data(ttl=300)
 def get_processed_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -58,68 +96,53 @@ def get_processed_data(s_date, e_date):
 
 df_all = get_processed_data(start_selected, end_selected)
 
-# 4. 결과 렌더링 함수 (HTML Table 직접 생성)
-def render_building_table(bu_name, data):
-    if data.empty:
-        return f"<p style='color:#888; font-style:italic;'>대관 내역이 없습니다.</p>"
-    
-    # 헤더 중앙 정렬 및 디자인 CSS 포함
-    html_code = f"""
-    <style>
-        .custom-table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; font-family: sans-serif; }}
-        .custom-table th {{ background-color: #333; color: white; text-align: center; padding: 12px 5px; font-size: 14px; border: 1px solid #444; }}
-        .custom-table td {{ border: 1px solid #dee2e6; padding: 10px 8px; font-size: 13.5px; vertical-align: middle; }}
-        @media (max-width: 600px) {{
-            .custom-table th, .custom-table td {{ font-size: 11px; padding: 6px 3px; }}
-        }}
-    </style>
-    <table class="custom-table">
-        <thead>
-            <tr>
-                <th style="width:90px;">날짜</th>
-                <th style="width:18%;">강의실</th>
-                <th style="width:110px;">시간</th>
-                <th>행사명</th>
-                <th style="width:18%;">관리부서</th>
-                <th style="width:70px;">상태</th>
-            </tr>
-        </thead>
-        <tbody>
-    """
-    for _, row in data.iterrows():
-        html_code += f"""
-            <tr>
-                <td style="text-align:center;">{row['날짜']}</td>
-                <td>{row['강의실']}</td>
-                <td style="text-align:center;">{row['시간']}</td>
-                <td>{row['행사명']}</td>
-                <td>{row['관리부서']}</td>
-                <td style="text-align:center;">{row['상태']}</td>
-            </tr>
-        """
-    html_code += "</tbody></table>"
-    return html_code
-
-# 5. 화면 표시
+# 5. 결과 출력
 export_list = []
 for bu in selected_bu:
-    st.markdown(f"#### 🏢 {bu}")
+    st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
     target_bu_clean = bu.replace(" ", "")
     
     if not df_all.empty:
         bu_df = df_all[df_all['건물명'].str.replace(" ", "").str.contains(target_bu_clean, na=False)].copy()
         if not bu_df.empty:
             bu_df = bu_df.sort_values(by=['날짜', 'sort_time'])
-            # 핵심: components.html을 사용하여 강제 렌더링
-            table_html = render_building_table(bu, bu_df)
-            components.html(table_html, height=len(bu_df) * 45 + 60, scrolling=False)
+            
+            # HTML 테이블 구성
+            table_html = f"""
+            <div class="table-container">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th class="col-date">날짜</th>
+                        <th class="col-place">강의실</th>
+                        <th class="col-time">시간</th>
+                        <th class="col-event">행사명</th>
+                        <th class="col-dept">관리부서</th>
+                        <th class="col-status">상태</th>
+                    </tr>
+                </thead>
+                <tbody>
+            """
+            for _, row in bu_df.iterrows():
+                table_html += f"""
+                    <tr>
+                        <td style="text-align:center;">{row['날짜']}</td>
+                        <td>{row['강의실']}</td>
+                        <td style="text-align:center;">{row['시간']}</td>
+                        <td>{row['행사명']}</td>
+                        <td>{row['관리부서']}</td>
+                        <td style="text-align:center;">{row['상태']}</td>
+                    </tr>
+                """
+            table_html += "</tbody></table></div>"
+            st.markdown(table_html, unsafe_allow_html=True)
             export_list.append(bu_df)
         else:
-            st.write("대관 내역이 없습니다.")
+            st.markdown('<div style="color:#888; padding-left:10px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     else:
-        st.write("대관 내역이 없습니다.")
+        st.markdown('<div style="color:#888; padding-left:10px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 
-# 6. 엑셀 다운로드
+# 6. 엑셀 다운로드 (현재 검색 결과 기준)
 if export_list:
     df_export = pd.concat(export_list)
     df_export['건물명'] = pd.Categorical(df_export['건물명'], categories=BUILDING_ORDER, ordered=True)
