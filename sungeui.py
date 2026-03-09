@@ -4,7 +4,7 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime, date, timedelta
 
-# 1. 페이지 설정: 화면 확대/축소 가능하도록 설정 (기본적으로 Streamlit은 지원하지만 명시적 제어는 CSS/HTML로 보완)
+# 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
 # 고정된 건물 순서 정의
@@ -18,11 +18,11 @@ BUILDING_ORDER = [
     "서울성모별관"
 ]
 
-# 2. CSS 설정 (중앙 정렬, 반응형 레이아웃, 모바일 시간 2줄 처리)
+# 2. CSS 설정 (HTML 렌더링 및 모바일 최적화)
 st.markdown("""
 <style>
-    /* 상단 여백 및 기본 폰트 설정 */
-    .block-container { padding-top: 3.5rem !important; }
+    /* 상단 잘림 방지 및 확대/축소 고려 */
+    .block-container { padding-top: 4rem !important; }
     
     .main-title { font-size: 26px !important; font-weight: bold; margin-bottom: 20px; color: #1E3A5F; }
     .building-header {
@@ -30,49 +30,40 @@ st.markdown("""
         margin-top: 25px; margin-bottom: 12px; padding-left: 5px; border-left: 5px solid #2E5077;
     }
     
-    .no-data-msg { color: #888; font-style: italic; padding: 10px; margin-bottom: 20px; }
-    
-    /* 테이블 기본 스타일: 헤더 중앙 정렬 고정 */
+    /* 테이블 스타일: 헤더 중앙 정렬 */
     .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .custom-table th { 
-        background-color: #333333 !important; 
-        color: #ffffff !important; 
-        text-align: center !important; 
-        font-weight: bold; 
-        vertical-align: middle !important;
+        background-color: #333333 !important; color: #ffffff !important; 
+        text-align: center !important; font-weight: bold; padding: 10px 4px;
     }
     .custom-table td { border: 1px solid #dee2e6; padding: 8px 4px !important; font-size: 14px; vertical-align: middle !important; }
 
-    /* 열 너비 설정 (기본 PC) */
-    .custom-table .col-date { width: 95px; text-align: center !important; }
-    .custom-table .col-place { width: 15%; text-align: left !important; }
-    .custom-table .col-time { width: 65px; text-align: center !important; }
-    .custom-table .col-event { width: auto; text-align: left !important; }
-    .custom-table .col-dept { width: 15%; text-align: left !important; }
-    .custom-table .col-status { width: 80px; text-align: center !important; }
+    /* 열 너비 설정 (PC) */
+    .col-date { width: 95px; }
+    .col-place { width: 15%; }
+    .col-time { width: 70px; }
+    .col-event { width: auto; }
+    .col-dept { width: 15%; }
+    .col-status { width: 80px; }
 
-    /* [모바일/태블릿 반응형 전용] */
+    /* 모바일 대응: 가로 768px 이하 */
     @media (max-width: 768px) {
         .custom-table { table-layout: auto; }
-        .custom-table th, .custom-table td { font-size: 12px; padding: 6px 3px !important; }
-        
-        /* 시간 셀 내의 줄바꿈 허용 (시작/종료를 한 셀에 두 줄로 표시하기 위함) */
-        .time-wrapper { display: block; line-height: 1.3; }
-        .time-sep { display: none; } /* '-' 기호 숨기기 */
-        
-        .custom-table .col-date { width: 70px !important; }
-        .custom-table .col-status { width: 60px !important; }
+        .custom-table th, .custom-table td { font-size: 12px; padding: 6px 2px !important; }
+        .time-wrapper { line-height: 1.2; display: block; text-align: center; }
+        .col-date { width: 70px !important; }
+        .col-status { width: 65px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 사이드바 설정 (기본값: 오늘)
+# 3. 사이드바 설정 (기본값: Today)
 st.sidebar.header("🔍 기간 설정")
 col1, col2 = st.sidebar.columns(2)
 start_selected = col1.date_input("시작일", value=date.today())
 end_selected = col2.date_input("종료일", value=date.today())
 
-# 타이틀 날짜 표시
+# 메인 타이틀 (날짜/기간 표시)
 title_date = start_selected.strftime('%Y-%m-%d') if start_selected == end_selected else f"{start_selected.strftime('%Y-%m-%d')} ~ {end_selected.strftime('%Y-%m-%d')}"
 st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황 ({title_date})</div>', unsafe_allow_html=True)
 
@@ -94,17 +85,21 @@ def get_processed_data(s_date, e_date):
                 if s_date <= curr_dt <= e_date:
                     target_weekday = str(curr_dt.weekday() + 1)
                     if (item['startDt'] == item['endDt']) or (target_weekday in allow_days):
-                        # 시작/종료 시간을 모바일 환경을 위해 HTML로 미리 포맷팅
-                        time_html = f'<div class="time-wrapper">{item.get("startTime", "")}<span class="time-sep"> - </span><br class="mobile-br">{item.get("endTime", "")}</div>'
+                        # 모바일 두 줄 표시를 위한 시간 포맷팅
+                        t_start = item.get('startTime', '')
+                        t_end = item.get('endTime', '')
+                        time_display = f'<div class="time-wrapper">{t_start}<br>{t_end}</div>'
+                        
                         expanded_rows.append({
                             '날짜': curr_dt.strftime('%Y-%m-%d'),
                             '건물명': str(item.get('buNm', '')).strip(),
                             '강의실': item.get('placeNm', ''),
-                            '시간': time_html,
+                            '시간': time_display,
                             '행사명': item.get('eventNm', ''),
                             '관리부서': item.get('mgDeptNm', ''),
                             '상태': '예약확정' if item.get('status') == 'Y' else '신청대기',
-                            'raw_start': item.get('startTime', '') # 정렬용
+                            'raw_start': t_start,
+                            'raw_end': t_end
                         })
                 curr_dt += timedelta(days=1)
         return pd.DataFrame(expanded_rows)
@@ -125,7 +120,7 @@ for bu in selected_bu:
         if not bu_df.empty:
             bu_df = bu_df.sort_values(by=['날짜', 'raw_start'])
             
-            # HTML 테이블 생성
+            # 중요: HTML 테이블 직접 구성 (st.markdown + unsafe_allow_html=True)
             table_html = f"""
             <table class="custom-table">
                 <thead>
@@ -145,7 +140,7 @@ for bu in selected_bu:
                     <tr>
                         <td style="text-align:center;">{row['날짜']}</td>
                         <td>{row['강의실']}</td>
-                        <td style="text-align:center;">{row['시간']}</td>
+                        <td>{row['시간']}</td>
                         <td>{row['행사명']}</td>
                         <td>{row['관리부서']}</td>
                         <td style="text-align:center;">{row['상태']}</td>
@@ -155,20 +150,22 @@ for bu in selected_bu:
             st.markdown(table_html, unsafe_allow_html=True)
             export_list.append(bu_df)
         else:
-            st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="color:#888; font-style:italic;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="color:#888; font-style:italic;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 
-# 6. 엑셀 다운로드 (정렬 유지)
+# 6. 엑셀 다운로드 (데이터 정제 후 저장)
 if export_list:
     df_export = pd.concat(export_list)
     df_export['건물명'] = pd.Categorical(df_export['건물명'], categories=BUILDING_ORDER, ordered=True)
     df_export = df_export.sort_values(by=['건물명', '날짜', 'raw_start'])
-    # 엑셀용 데이터는 HTML 태그 제거
-    df_export['시간'] = df_export['raw_start'] + " - " + df_export['시간'].str.extract(r'br.*?>(.*?)</div>')[0]
+    
+    # 엑셀용 시간 컬럼 재생성 (HTML 태그 제거)
+    df_export['시간(정리)'] = df_export['raw_start'] + " ~ " + df_export['raw_end']
+    excel_data = df_export[['날짜', '건물명', '강의실', '시간(정리)', '행사명', '관리부서', '상태']]
     
     st.sidebar.markdown("---")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_export[['날짜', '건물명', '강의실', '시간', '행사명', '관리부서', '상태']].to_excel(writer, index=False)
+        excel_data.to_excel(writer, index=False)
     st.sidebar.download_button("📥 현재 결과 엑셀 저장", output.getvalue(), f"대관현황_{date.today()}.xlsx")
