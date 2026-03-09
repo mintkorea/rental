@@ -12,116 +12,143 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 타이틀 크기 역전 및 테이블 가독성 강화
+# 2. CSS 설정: 레이아웃 복구 및 타이틀 강조
 st.markdown("""
 <style>
     .stApp { background-color: white; }
     
-    /* [수정] 메인 타이틀을 건물명보다 확실히 크게 설정 */
+    /* 메인 타이틀 강조 (건물명보다 크게) */
     .main-title { 
-        font-size: 28px !important; 
+        font-size: 26px !important; 
         font-weight: 800; 
         color: #002D56; 
-        margin-bottom: 25px; 
-        border-bottom: 2px solid #eee;
+        margin-bottom: 20px; 
         padding-bottom: 10px;
+        border-bottom: 2px solid #f0f0f0;
     }
     
-    /* 건물명 섹션 헤더 크기 조정 */
+    /* 건물명 섹션 헤더 */
     .building-header {
-        font-size: 18px !important; 
+        font-size: 19px !important; 
         font-weight: 700; 
         color: #2E5077;
-        margin-top: 30px; 
-        margin-bottom: 10px;
+        margin-top: 25px; 
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
     }
 
-    .custom-table { width: 100% !important; border-collapse: collapse; table-layout: fixed !important; }
-    .custom-table th { background-color: #444 !important; color: white !important; font-size: 13px; padding: 10px 2px; }
-    .custom-table td { border: 1px solid #eee; padding: 6px 4px; font-size: 13px; vertical-align: middle; line-height: 1.3; }
+    /* 테이블 레이아웃 복구 */
+    .custom-table { 
+        width: 100% !important; 
+        border-collapse: collapse; 
+        table-layout: fixed !important; 
+        margin-bottom: 20px;
+    }
+    .custom-table th { 
+        background-color: #444 !important; 
+        color: white !important; 
+        font-size: 13px; 
+        padding: 10px 2px;
+        border: 1px solid #333;
+    }
+    .custom-table td { 
+        border: 1px solid #eee; 
+        padding: 8px 4px !important; 
+        font-size: 13px; 
+        vertical-align: middle; 
+        line-height: 1.4;
+        word-break: break-all; /* 긴 단어 줄바꿈 */
+    }
 
-    /* 열 너비 설정 */
-    .w-date { width: 9%; text-align: center; }
-    .w-time { width: 11%; text-align: center; }
-    .w-place { width: 18%; text-align: center; }
-    .w-event { width: 37%; text-align: left; }
-    .w-dept { width: 17%; text-align: center; }
-    .w-status { width: 8%; text-align: center; }
+    /* 열별 텍스트 정렬 및 너비 고정 */
+    .t-center { text-align: center !important; }
+    .t-left { text-align: left !important; padding-left: 8px !important; }
 
+    .w-date { width: 8%; }
+    .w-time { width: 11%; }
+    .w-place { width: 18%; }
+    .w-event { width: 38%; }
+    .w-dept { width: 17%; }
+    .w-status { width: 8%; }
+
+    /* 모바일 최적화 */
     @media (max-width: 768px) {
         .main-title { font-size: 20px !important; }
-        .building-header { font-size: 16px !important; }
-        .custom-table td { font-size: 11px !important; }
+        .building-header { font-size: 17px !important; }
+        .custom-table td { font-size: 11px !important; padding: 5px 2px !important; }
         .pc-time { display: none; }
-        .mobile-time { display: block; font-size: 10px; }
+        .mobile-time { display: block; font-size: 10px; line-height: 1.1; font-weight: bold; }
+        
+        .w-date { width: 10%; }
+        .w-time { width: 12%; }
+        .w-status { width: 9%; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 사이드바 (초기 로드시 오늘 날짜 자동 반영)
+# 3. 사이드바 설정 (초기 로드시 오늘 날짜 반영)
 st.sidebar.header("🔍 대관 조회 필터")
-start_selected = st.sidebar.date_input("시작일", value=now_today, key="st_date")
-end_selected = st.sidebar.date_input("종료일", value=now_today, key="en_date")
+start_selected = st.sidebar.date_input("시작일", value=now_today, key="start_d")
+end_selected = st.sidebar.date_input("종료일", value=now_today, key="end_d")
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 selected_bu = st.sidebar.multiselect("조회 건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-# 4. 데이터 로직 (정렬 및 이상 데이터 필터링)
+# 4. 데이터 정제 및 정렬 로직 (이미지 d888bc 기반 정렬)
 @st.cache_data(ttl=60)
-def get_clean_data(s_date, e_date):
+def get_rental_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": s_date.isoformat(), "end": e_date.isoformat()}
     try:
         res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        raw = res.json().get('res', [])
+        raw_data = res.json().get('res', [])
         rows = []
-        for item in raw:
-            # 1단계: 빈 데이터나 잘못된 형식 필터링
+        for item in raw_data:
             if not item.get('startDt') or not item.get('buNm'): continue
             
+            # API 날짜 정보 파싱
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            allow = [d.strip() for d in str(item.get('allowDay', '')).split(',') if d.strip()]
             
+            # 기간 내 모든 날짜 생성 (정렬을 위해)
             curr = s_dt
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
-                    # 장기 대관일 경우 해당 요일만 포함 (단일일은 무조건 포함)
-                    if (item['startDt'] == item['endDt']) or (not allow) or (str(curr.weekday() + 1) in allow):
-                        rows.append({
-                            'raw_date': curr, # 정렬용
-                            '날짜': curr.strftime('%m-%d'),
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', ''),
-                            '시작': item.get('startTime', '00:00'),
-                            '종료': item.get('endTime', '00:00'),
-                            '행사명': item.get('eventNm', ''),
-                            '부서': item.get('mgDeptNm', ''),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
+                    rows.append({
+                        'raw_date': curr, # 정렬용 기준
+                        'raw_time': item.get('startTime', '00:00'), # 정렬용 시간
+                        '날짜': curr.strftime('%m-%d'),
+                        '건물명': str(item.get('buNm', '')).strip(),
+                        '장소': item.get('placeNm', ''),
+                        '시작': item.get('startTime', ''),
+                        '종료': item.get('endTime', ''),
+                        '행사명': item.get('eventNm', ''),
+                        '부서': item.get('mgDeptNm', ''),
+                        '상태': '확정' if item.get('status') == 'Y' else '대기'
+                    })
                 curr += timedelta(days=1)
         
-        # [정렬 핵심] 날짜 -> 시간 -> 건물명 순으로 정렬
         df = pd.DataFrame(rows)
+        # 1. 날짜 순 2. 시간 순 정렬 (이미지 d888bc 요청사항 반영)
         if not df.empty:
-            df = df.sort_values(by=['raw_date', '시작', '건물명'])
+            df = df.sort_values(by=['raw_date', 'raw_time'])
         return df
     except: return pd.DataFrame()
 
-processed_df = get_clean_data(start_selected, end_selected)
+df_final = get_rental_data(start_selected, end_selected)
 
-# 5. 결과 렌더링
-# 타이틀에 조회 기간 명시 및 크기 강조
-date_range_str = f"{start_selected}" if start_selected == end_selected else f"{start_selected} ~ {end_selected}"
-st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황 ({date_range_str})</div>', unsafe_allow_html=True)
+# 5. 메인 화면 출력
+# 타이틀 기간 표시 (image_d88120 보완)
+date_range = f"{start_selected}" if start_selected == end_selected else f"{start_selected} ~ {end_selected}"
+st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황 ({date_range})</div>', unsafe_allow_html=True)
 
-# 건물별 섹션 출력 (선택된 건물이 있을 경우만)
 for bu in selected_bu:
     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
     
-    if not processed_df.empty:
-        # 현재 건물 데이터만 필터링 (정렬은 이미 위에서 완료됨)
-        bu_df = processed_df[processed_df['건물명'].str.replace(" ","").str.contains(bu.replace(" ",""), na=False)]
+    if not df_final.empty:
+        # 건물별 필터링 (공백 제거 후 비교)
+        bu_df = df_final[df_final['건물명'].str.replace(" ","").str.contains(bu.replace(" ",""), na=False)]
         
         if not bu_df.empty:
             html = '<table class="custom-table"><thead><tr>'
@@ -130,24 +157,27 @@ for bu in selected_bu:
             html += '</tr></thead><tbody>'
             
             for _, r in bu_df.iterrows():
-                time_pc = f'<div class="pc-time">{r["시작"]}~{r["종료"]}</div>'
-                time_mobile = f'<div class="mobile-time"><b>{r["시작"]}</b><br>{r["종료"]}</div>'
+                # 시간 표시 (PC 한 줄, 모바일 두 줄) - 중복 출력 방지
+                time_str = f'{r["시작"]}~{r["종료"]}'
+                time_html = f'<div class="pc-time">{time_str}</div>'
+                time_html += f'<div class="mobile-time">{r["시작"]}<br>{r["종료"]}</div>'
                 
-                html += f'<tr><td class="w-date">{r["날짜"]}</td>'
-                html += f'<td class="w-time">{time_pc}{time_mobile}</td>'
-                html += f'<td class="w-place">{r["장소"]}</td>'
-                html += f'<td class="w-event">{r["행사명"]}</td>'
-                html += f'<td class="w-dept">{r["부서"]}</td>'
-                html += f'<td class="w-status">{r["상태"]}</td></tr>'
+                html += f'<tr><td class="w-date t-center">{r["날짜"]}</td>'
+                html += f'<td class="w-time t-center">{time_html}</td>'
+                html += f'<td class="w-place t-center">{r["장소"]}</td>'
+                html += f'<td class="w-event t-left">{r["행사명"]}</td>'
+                html += f'<td class="w-dept t-center">{r["부서"]}</td>'
+                html += f'<td class="w-status t-center">{r["상태"]}</td></tr>'
+            
             html += '</tbody></table>'
             st.markdown(html, unsafe_allow_html=True)
         else:
-            st.markdown('<p style="color:#999; font-size:12px; padding-left:10px;">해당 기간 내 대관 내역이 없습니다.</p>', unsafe_allow_html=True)
+            st.markdown('<p style="color:#999; font-size:12px; margin-left:10px;">조회 내역 없음</p>', unsafe_allow_html=True)
 
-# 6. 다운로드 버튼
-if not processed_df.empty:
+# 6. 엑셀 다운로드
+if not df_final.empty:
     st.sidebar.markdown("---")
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        processed_df.drop(columns=['raw_date']).to_excel(writer, index=False)
-    st.sidebar.download_button("📥 전체 일정 엑셀 저장", output.getvalue(), f"rental_report_{now_today}.xlsx")
+        df_final.drop(columns=['raw_date', 'raw_time']).to_excel(writer, index=False)
+    st.sidebar.download_button("📥 전체 일정 엑셀 저장", output.getvalue(), f"대관현황_{start_selected}.xlsx")
