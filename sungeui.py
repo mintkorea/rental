@@ -18,22 +18,25 @@ BUILDING_ORDER = [
     "서울성모별관"
 ]
 
-# 2. CSS 설정 (여백 및 열 너비 조정)
+# 2. CSS 설정 (상단 여백 확보 및 타이틀 위치 조정)
 st.markdown("""
 <style>
-    /* 상단 여백 최소화 */
-    .block-container { padding-top: 2rem !important; }
+    /* 상단 잘림 방지를 위해 여백을 3rem으로 조정 */
+    .block-container { padding-top: 3.5rem !important; }
     
     .main-title { 
-        font-size: 26px !important; 
+        font-size: 28px !important; 
         font-weight: bold; 
-        margin-bottom: 20px; 
+        margin-top: 10px;    /* 타이틀 위쪽 여백 추가 */
+        margin-bottom: 25px; /* 타이틀과 건물명 사이 간격 */
         color: #1E3A5F;
     }
+    
     .building-header {
         font-size: 22px !important; font-weight: bold; color: #2E5077;
-        margin-top: 10px; margin-bottom: 10px; padding-left: 5px; border-left: 5px solid #2E5077;
+        margin-top: 10px; margin-bottom: 12px; padding-left: 5px; border-left: 5px solid #2E5077;
     }
+    
     .no-data-msg { color: #888; font-style: italic; padding: 10px; margin-bottom: 20px; }
     
     .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -62,7 +65,7 @@ col1, col2 = st.sidebar.columns(2)
 start_selected = col1.date_input("시작일", value=date(2026, 3, 10))
 end_selected = col2.date_input("종료일", value=date(2026, 3, 14))
 
-# 메인 타이틀 동적 생성 로직
+# 메인 타이틀 동적 생성
 if start_selected == end_selected:
     title_date = start_selected.strftime('%Y-%m-%d')
 else:
@@ -131,17 +134,16 @@ for bu in selected_bu:
         st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-# 6. 엑셀 다운로드
+# 6. 엑셀 다운로드 (사이드바)
 if not df.empty:
     st.sidebar.markdown("---")
     final_view = df.copy()
-    if not final_view.empty:
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            final_view.to_excel(writer, index=False)
-        st.sidebar.download_button(
-            label="📥 현재 리스트 엑셀 저장",
-            data=output.getvalue(),
-            file_name=f"성의교정_대관현황_{date.today()}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        final_view.to_excel(writer, index=False)
+    st.sidebar.download_button(
+        label="📥 현재 리스트 엑셀 저장",
+        data=output.getvalue(),
+        file_name=f"성의교정_대관현황_{date.today()}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
