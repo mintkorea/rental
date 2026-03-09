@@ -12,7 +12,7 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 줄바꿈 허용 및 텍스트 크기 유연화
+# 2. CSS 설정: 모바일 부서명 2줄 제한 및 자동 크기 조절
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -33,31 +33,41 @@ st.markdown("""
     .custom-table td { 
         background-color: white !important; color: black !important;
         border: 1px solid #eee; padding: 5px 2px !important; 
-        font-size: 12.5px; /* 기본 폰트 살짝 조정 */
+        font-size: 12.5px; 
         vertical-align: middle; text-align: center;
-        
-        /* [중요] 글자 생략 방지 및 줄바꿈 설정 */
-        white-space: normal !important; /* 자동 줄바꿈 허용 */
-        word-break: keep-all; /* 단어 단위 줄바꿈으로 가독성 유지 */
         line-height: 1.2;
     }
-
-    /* 행사명 및 장소, 부서는 왼쪽 정렬 권장 혹은 간격 유지 */
-    .col-wrap { text-align: center !important; }
-    .col-left { text-align: left !important; padding-left: 5px !important; }
 
     /* [너비 조정] 부서와 장소 비중 최적화 */
     .w-date   { width: 9%; }   
     .w-time   { width: 10%; }  
-    .w-place  { width: 19%; }  /* 장소 확보 */
-    .w-event  { width: 37%; }  /* 행사명 */
-    .w-dept   { width: 17%; }  /* 부서 확보 */
+    .w-place  { width: 19%; }  
+    .w-event  { width: 37%; }  
+    .w-dept   { width: 17%; }  /* 부서 셀 */
     .w-status { width: 8%; }   
 
+    /* 부서명/장소명 텍스트 자동 줄바꿈 및 크기 조절 */
+    .cell-shrink {
+        display: -webkit-box;
+        -webkit-line-clamp: 2; /* 최대 2줄까지만 허용 */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break: break-all;
+        white-space: normal;
+    }
+
     @media (max-width: 768px) {
-        .custom-table th, .custom-table td { font-size: 10.5px !important; padding: 4px 1px !important; }
+        .custom-table th, .custom-table td { font-size: 10px !important; padding: 4px 1px !important; }
         .pc-time { display: none; }
-        .mobile-time { display: block; font-size: 9.5px; line-height: 1.1; }
+        .mobile-time { display: block; font-size: 9px; line-height: 1.1; }
+        
+        /* 모바일 부서명 강제 폰트 축소 */
+        .dept-text {
+            font-size: 9px !important; 
+            line-height: 1.0 !important;
+            max-height: 2.2em; /* 2줄 높이로 제한 */
+        }
         
         .w-date { width: 11%; }
         .w-time { width: 12%; }
@@ -71,10 +81,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 사이드바 설정
+# 3. 사이드바 설정 (오늘 날짜 2026-03-10 기본 로드)
 st.sidebar.header("🔍 조회 설정")
-start_selected = st.sidebar.date_input("시작일", value=now_today, key="rental_start_final")
-end_selected = st.sidebar.date_input("종료일", value=now_today, key="rental_end_final")
+start_selected = st.sidebar.date_input("시작일", value=now_today, key="rental_final_v2")
+end_selected = st.sidebar.date_input("종료일", value=now_today, key="rental_end_v2")
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
@@ -110,12 +120,13 @@ for bu in selected_bu:
                 time_mobile = f'<div class="mobile-time"><b>{r["startTime"]}</b><br>{r["endTime"]}</div>'
                 
                 html += f'<tr><td class="w-date">{r["startDt"][5:]}</td>'
-                # [수정] 장소명 줄바꿈 적용
-                html += f'<td class="w-place col-wrap">{r["placeNm"]}</td>'
+                # 장소명: 2줄 제한 및 축소 적용
+                html += f'<td class="w-place"><div class="cell-shrink">{r["placeNm"]}</div></td>'
                 html += f'<td class="w-time">{time_pc}{time_mobile}</td>'
-                html += f'<td class="col-left w-event">{r["eventNm"]}</td>'
-                # [수정] 부서명 줄바꿈 적용
-                html += f'<td class="w-dept col-wrap">{r["mgDeptNm"]}</td>'
+                # 행사명: 왼쪽 정렬 및 줄바꿈 유지
+                html += f'<td style="text-align:left; padding-left:5px; white-space:normal; word-break:break-all;">{r["eventNm"]}</td>'
+                # 부서명: 모바일에서 2줄 제한 및 폰트 축소 강제 적용
+                html += f'<td class="w-dept"><div class="cell-shrink dept-text">{r["mgDeptNm"]}</div></td>'
                 html += f'<td class="w-status">{"확정" if r["status"]=="Y" else "대기"}</td></tr>'
             
             html += '</tbody></table>'
