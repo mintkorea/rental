@@ -12,7 +12,7 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 웹 화면 디자인 (d888bc 스타일 복구 및 유지)
+# 2. CSS 설정: 웹 화면 디자인 (d888bc 스타일 유지 + 인원 셀 추가)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -39,7 +39,7 @@ end_selected = st.sidebar.date_input("종료일", value=now_today)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 selected_bu = st.sidebar.multiselect("조회 건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-# 4. 타이틀 조건부 표출 로직 (당일 조회 시 간소화)
+# 4. 타이틀 조건부 표출
 if start_selected == end_selected:
     display_title = f"성의교정 대관 현황 ({start_selected})"
 else:
@@ -47,7 +47,7 @@ else:
 
 st.markdown(f'<div class="main-title">🏫 {display_title}</div>', unsafe_allow_html=True)
 
-# 5. 데이터 처리 함수 (정렬 및 요일 필터 포함)
+# 5. 데이터 처리 함수 (인원 정보 포함)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -67,9 +67,13 @@ def get_data(s_date, e_date):
                     if (item['startDt'] == item['endDt']) or (not allow_days) or (str(curr.weekday()+1) in allow_days):
                         rows.append({
                             'raw_date': curr, 'raw_time': item.get('startTime', '00:00'),
-                            '날짜': curr.strftime('%m-%d'), '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', ''), '시간': f"{item.get('startTime', '')} ~ {item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', ''), '부서': item.get('mgDeptNm', ''),
+                            '날짜': curr.strftime('%Y-%m-%d'), 
+                            '건물명': str(item.get('buNm', '')).strip(),
+                            '장소': item.get('placeNm', ''), 
+                            '시간': f"{item.get('startTime', '')} ~ {item.get('endTime', '')}",
+                            '행사명': item.get('eventNm', ''), 
+                            '인원': item.get('extV1', '-'), # 인원 정보 (필드명 확인 필요)
+                            '부서': item.get('mgDeptNm', ''),
                             '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
@@ -82,75 +86,71 @@ all_df = get_data(start_selected, end_selected)
 # 6. 화면 출력 및 데이터 수집
 pdf_data_list = []
 for bu in selected_bu:
-    st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
     bu_df = all_df[all_df['건물명'].str.replace(" ","").str.contains(bu.replace(" ",""), na=False)] if not all_df.empty else pd.DataFrame()
     
     if not bu_df.empty:
-        pdf_data_list.append((bu, bu_df)) # PDF 생성용 데이터 보관
-        html = '<table class="custom-table"><thead><tr><th style="width:10%">날짜</th><th style="width:15%">시간</th><th style="width:15%">장소</th><th style="width:35%">행사명</th><th style="width:15%">부서</th><th style="width:10%">상태</th></tr></thead><tbody>'
-        for _, r in bu_df.iterrows():
-            st_t, en_t = r['시간'].split('~')[0].strip(), r['시간'].split('~')[1].strip()
-            time_td = f'<div class="pc-time">{r["시간"]}</div><div class="mobile-time">{st_t}<br>~ {en_t}</div>'
-            html += f'<tr><td>{r["날짜"]}</td><td>{time_td}</td><td>{r["장소"]}</td><td style="text-align:left; padding-left:10px;">{r["행사명"]}</td><td>{r["부서"]}</td><td>{r["상태"]}</td></tr>'
-        html += '</tbody></table>'
-        st.markdown(html, unsafe_allow_html=True)
+        # 날짜별로 그룹화하여 출력
+        for date, date_df in bu_df.groupby('날짜'):
+            st.markdown(f'<div class="building-header">🏢 {bu}({date})</div>', unsafe_allow_html=True)
+            pdf_data_list.append((f"{bu}({date})", date_df))
+            
+            html = '<table class="custom-table"><thead><tr>'
+            html += '<th style="width:20%">장소</th><th style="width:15%">시간</th><th style="width:30%">행사명</th>'
+            html += '<th style="width:10%">인원</th><th style="width:15%">부서</th><th style="width:10%">상태</th>'
+            html += '</tr></thead><tbody>'
+            for _, r in date_df.iterrows():
+                st_t, en_t = r['시간'].split('~')[0].strip(), r['시간'].split('~')[1].strip()
+                time_td = f'<div class="pc-time">{r["시간"]}</div><div class="mobile-time">{st_t}<br>~ {en_t}</div>'
+                html += f'<tr><td>{r["장소"]}</td><td>{time_td}</td><td style="text-align:left; padding-left:10px;">{r["행사명"]}</td>'
+                html += f'<td>{r["인원"]}</td><td>{r["부서"]}</td><td>{r["상태"]}</td></tr>'
+            html += '</tbody></table>'
+            st.markdown(html, unsafe_allow_html=True)
     else:
-        st.markdown('<p style="color:#999; font-size:13px; margin-left:15px; margin-bottom:30px;">조회 내역 없음</p>', unsafe_allow_html=True)
+        st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#999; font-size:13px; margin-left:15px; margin-bottom:30px;">대관 내역이 없습니다.</p>', unsafe_allow_html=True)
 
-# 7. PDF 생성 함수 (이미지 스타일의 깔끔한 문서 양식)
+# 7. PDF 생성 함수 (날짜 셀 제거, 인원 셀 추가)
 def create_image_style_pdf(content_list, main_title):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.add_font("Nanum", "", "NanumGothic.ttf") # 업로드하신 폰트 사용
+    pdf.add_font("Nanum", "", "NanumGothic.ttf")
     pdf.add_page()
     
-    # 리포트 타이틀
     pdf.set_font("Nanum", size=18)
     pdf.cell(0, 15, main_title, ln=True, align='C')
     pdf.ln(5)
 
-    for bu_name, df in content_list:
-        # 건물 섹션 헤더
+    for section_title, df in content_list:
         pdf.set_font("Nanum", size=11)
-        pdf.set_text_color(46, 80, 119)
-        pdf.cell(0, 10, f"■ {bu_name} (조회일 기준 대관 내역)", ln=True)
         pdf.set_text_color(0, 0, 0)
+        pdf.cell(0, 10, section_title, ln=True)
         
-        # 테이블 헤더 디자인
         pdf.set_font("Nanum", size=10)
-        pdf.set_fill_color(240, 240, 240)
-        cols = ["날짜", "장소", "시간", "행사명", "부서", "상태"]
-        widths = [20, 40, 40, 105, 45, 25]
+        pdf.set_fill_color(220, 220, 220)
+        # 헤더: 날짜 제외, 인원 추가
+        cols = ["장소", "시간", "행사명", "인원", "부서", "상태"]
+        widths = [45, 40, 95, 20, 45, 20]
         for i, col in enumerate(cols):
             pdf.cell(widths[i], 10, col, border=1, align='C', fill=True)
         pdf.ln()
         
-        # 데이터 행 디자인
         pdf.set_font("Nanum", size=9)
         for _, row in df.iterrows():
-            pdf.cell(widths[0], 9, str(row['날짜']), border=1, align='C')
-            pdf.cell(widths[1], 9, str(row['장소'])[:15], border=1, align='C')
-            pdf.cell(widths[2], 9, str(row['시간']), border=1, align='C')
-            pdf.cell(widths[3], 9, str(row['행사명'])[:48], border=1) # 행사명 길이 제한
+            pdf.cell(widths[0], 9, str(row['장소'])[:18], border=1, align='C')
+            pdf.cell(widths[1], 9, str(row['시간']), border=1, align='C')
+            pdf.cell(widths[2], 9, str(row['행사명'])[:45], border=1)
+            pdf.cell(widths[3], 9, str(row['인원']), border=1, align='C')
             pdf.cell(widths[4], 9, str(row['부서'])[:15], border=1, align='C')
             pdf.cell(widths[5], 9, str(row['상태']), border=1, align='C')
             pdf.ln()
-        pdf.ln(8) # 섹션 간 간격
+        pdf.ln(5)
         
     return pdf.output()
 
-# 8. 사이드바 저장 버튼
+# 8. 저장 버튼
 if pdf_data_list:
     st.sidebar.markdown("---")
-    # 엑셀 저장
-    final_df = pd.concat([d for b, d in pdf_data_list]).drop(columns=['raw_date', 'raw_time'])
-    out_ex = BytesIO()
-    with pd.ExcelWriter(out_ex, engine='openpyxl') as writer:
-        final_df.to_excel(writer, index=False)
-    st.sidebar.download_button("📥 엑셀(Excel) 저장", out_ex.getvalue(), f"rental_{start_selected}.xlsx")
-    
-    # PDF 저장 (이미지 스타일 리포트)
     try:
         pdf_bytes = create_image_style_pdf(pdf_data_list, display_title)
         st.sidebar.download_button("📄 PDF 리포트 저장", bytes(pdf_bytes), f"rental_{start_selected}.pdf", "application/pdf")
     except Exception as e:
-        st.sidebar.error("PDF 생성 중 오류가 발생했습니다. (폰트 파일 확인 필요)")
+        st.sidebar.error("PDF 생성 중 오류가 발생했습니다.")
