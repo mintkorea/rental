@@ -14,20 +14,16 @@ now_today = datetime.now(KST).date()
 # 건물 리스트 순서 고정
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
 
-# 2. CSS 설정: 모바일 대응 및 빈 화면 가독성 최적화
+# 2. CSS 설정: 모바일 최적화 및 표 가독성
 st.markdown("""
 <style>
     .stApp { background-color: white; }
     .main-title { font-size: 20px !important; font-weight: 800; text-align: center; margin-bottom: 15px; }
     .building-header { font-size: 16px !important; font-weight: 700; margin-top: 20px; border-left: 4px solid #2E5077; padding-left: 8px; margin-bottom: 10px; }
-    
-    /* 모바일 가로 스크롤 및 표 너비 최적화 */
     .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     table { width: 100% !important; border-collapse: collapse; table-layout: auto !important; min-width: 550px; }
     th { background-color: #f8f9fa !important; border: 1px solid #dee2e6 !important; padding: 4px 2px !important; font-size: 10px; }
     td { border: 1px solid #eee !important; padding: 6px 2px !important; font-size: 11px; text-align: center; }
-    
-    /* 행사명 열 너비 확보 및 줄바꿈 처리 */
     .col-event { text-align: left !important; white-space: normal !important; word-break: keep-all; min-width: 150px; }
     .small-cell { width: 45px; font-size: 10px; }
 </style>
@@ -68,8 +64,8 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. PDF 바이너리 생성 함수 (AttributeError 방지)
-def get_pdf_bytes(df, title_text):
+# 4. PDF 생성 함수 (io.BytesIO를 사용한 가장 안전한 방식)
+def get_pdf_output(df, title_text):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_font("Nanum", "", "NanumGothic.ttf", uni=True)
     pdf.add_page()
@@ -94,36 +90,35 @@ def get_pdf_bytes(df, title_text):
         pdf.cell(20, 9, str(row['상태']), border=1, align='C')
         pdf.ln()
     
-    # 다운로드를 위한 바이너리 변환
-    return pdf.output(dest='S').encode('latin-1', 'replace')
+    # ⚠️ 중요: output() 결과를 bytearray로 변환하여 반환
+    return bytes(pdf.output())
 
-# 5. 메인 UI 및 사이드바
+# 5. 메인 UI
 st.sidebar.title("📅 대관 조회 필터")
 start_selected = st.sidebar.date_input("조회 시작일", value=now_today)
 end_selected = st.sidebar.date_input("조회 종료일", value=now_today)
 selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-display_title = f"성의교정 대관 현황 ({start_selected})" if start_selected == end_selected else f"성의교정 대관 현황 ({start_selected} ~ {end_selected})"
 all_df = get_data(start_selected, end_selected)
+display_title = f"성의교정 대관 현황 ({start_selected} ~ {end_selected})" if start_selected != end_selected else f"성의교정 대관 현황 ({start_selected})"
 
-# 🚀 PDF 즉시 다운로드 버튼 배치
+# 🚀 PDF 즉시 다운로드 버튼 (데이터 있을 때만 표시)
 if not all_df.empty:
     try:
-        pdf_content = get_pdf_bytes(all_df, display_title)
+        pdf_bytes = get_pdf_output(all_df, display_title)
         st.sidebar.download_button(
             label="📥 PDF 저장하기",
-            data=pdf_content,
+            data=pdf_bytes,
             file_name=f"rental_{start_selected}.pdf",
             mime="application/pdf"
         )
-    except:
-        st.sidebar.error("PDF 준비 중 오류가 발생했습니다.")
+    except Exception as e:
+        st.sidebar.error(f"PDF 생성 오류: {str(e)}")
 else:
-    st.sidebar.info("조회된 데이터가 없습니다.")
+    st.sidebar.info("조회된 내역이 없습니다.")
 
 st.markdown(f'<div class="main-title">🏫 {display_title}</div>', unsafe_allow_html=True)
 
-# 결과 출력 로직
 if not all_df.empty:
     for bu in selected_bu:
         bu_df = all_df[all_df['건물명'] == bu]
@@ -139,4 +134,4 @@ if not all_df.empty:
         else:
             st.write("대관 내역이 없습니다.")
 else:
-    st.info("조회된 기간에 해당하는 대관 내역이 없습니다.")
+    st.info("조회된 내역이 없습니다.")
