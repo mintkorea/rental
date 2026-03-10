@@ -39,7 +39,7 @@ end_selected = st.sidebar.date_input("종료일", value=now_today)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 selected_bu = st.sidebar.multiselect("조회 건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-# 4. 데이터 처리 로직
+# 4. 데이터 처리 로직 (인원 데이터 추가 추출)
 @st.cache_data(ttl=60)
 def get_clean_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -67,6 +67,7 @@ def get_clean_data(s_date, e_date):
                             '시간': f"{item.get('startTime', '')} ~ {item.get('endTime', '')}",
                             '행사명': item.get('eventNm', ''),
                             '부서': item.get('mgDeptNm', ''),
+                            '인원': item.get('rentCnt', '-'), # 인원 데이터 추가
                             '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
@@ -76,7 +77,7 @@ def get_clean_data(s_date, e_date):
 
 all_df = get_clean_data(start_selected, end_selected)
 
-# 5. 타이틀 설정
+# 5. 타이틀 조건부 노출
 if start_selected == end_selected:
     display_title = f"성의교정 대관 현황 ({start_selected})"
 else:
@@ -84,7 +85,7 @@ else:
 
 st.markdown(f'<div class="main-title">🏫 {display_title}</div>', unsafe_allow_html=True)
 
-# 6. 화면 출력 및 데이터 수집 (웹: '부서' 포함 상세 표출)
+# 6. 화면 출력 (웹: 부서 포함 상세)
 excel_data_list = []
 for bu in selected_bu:
     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
@@ -94,21 +95,20 @@ for bu in selected_bu:
         excel_data_list.append(bu_df)
         html = '<table class="custom-table"><thead><tr>'
         html += '<th style="width:10%">날짜</th><th style="width:15%">시간</th><th style="width:15%">장소</th>'
-        html += '<th style="width:35%">행사명</th><th style="width:15%">부서</th><th style="width:10%">상태</th>'
+        html += '<th style="width:30%">행사명</th><th style="width:15%">부서</th><th style="width:8%">인원</th><th style="width:7%">상태</th>'
         html += '</tr></thead><tbody>'
         for _, r in bu_df.iterrows():
             st_t, en_t = r['시간'].split('~')[0].strip(), r['시간'].split('~')[1].strip()
             time_td = f'<div class="pc-time">{r["시간"]}</div><div class="mobile-time">{st_t}<br>~ {en_t}</div>'
             html += f'<tr><td>{r["날짜"]}</td><td>{time_td}</td><td>{r["장소"]}</td>'
-            html += f'<td style="text-align:left; padding-left:10px;">{r["행사명"]}</td><td>{r["부서"]}</td><td>{r["상태"]}</td></tr>'
+            html += f'<td style="text-align:left; padding-left:10px;">{r["행사명"]}</td><td>{r["부서"]}</td><td>{r["인원"]}</td><td>{r["상태"]}</td></tr>'
         html += '</tbody></table>'
         st.markdown(html, unsafe_allow_html=True)
     else:
         st.markdown('<p style="color:#999; font-size:13px; margin-left:15px; margin-bottom:30px;">조회된 내역이 없습니다.</p>', unsafe_allow_html=True)
 
-# 7. PDF 생성 함수 (PDF: '부서' 제외 핵심만 출력)
+# 7. PDF 생성 함수 (PDF: 건물명, 인원 포함 / 부서 제외)
 def create_pdf(df, title):
-    # 가로형(L) A4 설정
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
     
@@ -122,9 +122,9 @@ def create_pdf(df, title):
     pdf.cell(0, 15, title, ln=True, align='C')
     pdf.ln(5)
     
-    # PDF용 컬럼 설정 (부서 제외)
-    pdf_cols = ["날짜", "시간", "장소", "행사명", "상태"]
-    widths = [25, 45, 55, 125, 20]
+    # PDF 전용 컬럼: 건물명, 인원 포함
+    pdf_cols = ["날짜", "시간", "건물명", "장소", "행사명", "인원", "상태"]
+    widths = [20, 35, 30, 40, 105, 18, 18]
     
     pdf.set_font("Nanum" if os.path.exists(font_path) else "Arial", size=10)
     pdf.set_fill_color(68, 68, 68) 
@@ -138,13 +138,16 @@ def create_pdf(df, title):
     for _, row in df.iterrows():
         pdf.cell(widths[0], 9, str(row['날짜']), border=1, align='C')
         pdf.cell(widths[1], 9, str(row['시간']), border=1, align='C')
-        pdf.cell(widths[2], 9, str(row['장소'])[:18], border=1, align='C')
-        pdf.cell(widths[3], 9, str(row['행사명'])[:55], border=1, align='L')
-        pdf.cell(widths[4], 9, str(row['상태']), border=1, align='C')
+        pdf.cell(widths[2], 9, str(row['건물명'])[:10], border=1, align='C')
+        pdf.cell(widths[3], 9, str(row['장소'])[:13], border=1, align='C')
+        pdf.cell(widths[4], 9, str(row['행사명'])[:50], border=1, align='L')
+        pdf.cell(widths[5], 9, str(row['인원']), border=1, align='C')
+        pdf.cell(widths[6], 9, str(row['상태']), border=1, align='C')
         pdf.ln()
-        if pdf.get_y() > 180: pdf.add_page()
-        
-    # [핵심 해결] bytearray를 bytes로 변환하여 반환
+        if pdf.get_y() > 180:
+            pdf.add_page()
+            # 새 페이지 헤더 재출력 로직 생략 가능 (필요 시 추가)
+            
     return bytes(pdf.output(dest='S'))
 
 # 8. 저장 버튼 (사이드바)
