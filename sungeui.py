@@ -12,22 +12,23 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. 건물 리스트 순서 고정
+# 2. 건물 리스트 순서 고정 (사용자 요건 반영)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
 
-# 3. CSS 설정 (홈페이지 디자인 복구)
+# 3. CSS 설정 (홈페이지 디자인 및 테이블 가독성 최적화)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
     .main-title { font-size: 26px !important; font-weight: 800; color: #002D56; margin-bottom: 25px; }
     .building-header { font-size: 18px !important; font-weight: 700; color: #2E5077; margin-top: 30px; margin-bottom: 10px; border-left: 5px solid #2E5077; padding-left: 10px; }
-    .custom-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; table-layout: auto; }
-    .custom-table th { background-color: #444; color: white; padding: 10px; border: 1px solid #333; font-size: 14px; }
+    .custom-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .custom-table th { background-color: #444; color: white; padding: 10px; border: 1px solid #333; font-size: 14px; text-align: center; }
     .custom-table td { border: 1px solid #eee; padding: 10px; text-align: center; font-size: 13px; }
+    .event-name { text-align: left !important; padding-left: 15px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# 4. 데이터 로드 함수 (인원 포함)
+# 4. 데이터 로드 함수 (인원 데이터 추출 로직 보강)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -48,13 +49,12 @@ def get_data(s_date, e_date):
                 if s_date <= curr <= e_date:
                     if (item['startDt'] == item['endDt']) or (not allow_days) or (str(curr.weekday()+1) in allow_days):
                         rows.append({
-                            'raw_date': curr,
-                            '날짜': curr.strftime('%Y-%m-%d'),
+                            '날짜': curr.strftime('%m-%d'),
                             '건물명': str(item.get('buNm', '')).strip(),
                             '장소': item.get('placeNm', ''), 
                             '시간': f"{item.get('startTime', '')} ~ {item.get('endTime', '')}",
                             '행사명': item.get('eventNm', ''), 
-                            '인원': item.get('peopleCount', '-'),
+                            '인원': item.get('peopleCount', '-'), # 인원 데이터 반영
                             '부서': item.get('mgDeptNm', ''),
                             '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
@@ -66,7 +66,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 5. PDF 생성 함수 (이미지 예시처럼 날짜별 건물 그룹화)
+# 5. PDF 생성 함수 (나눔고딕 폰트 적용 및 레이아웃 최적화)
 def create_pdf(df, title_text):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -82,49 +82,48 @@ def create_pdf(df, title_text):
     pdf.cell(0, 15, title_text, ln=True, align='C')
     pdf.ln(5)
 
-    # 날짜별 -> 건물별로 순회하며 테이블 생성
-    for date in df['날짜'].unique():
-        date_df = df[df['날짜'] == date]
-        for bu in BUILDING_ORDER:
-            bu_df = date_df[date_df['건물명'] == bu]
-            if bu_df.empty: continue
-            
-            # 건물명 헤더
-            pdf.set_font("Nanum", size=12)
-            pdf.cell(0, 10, f"{bu}({date})", ln=True)
-            
-            # 테이블 헤더
-            pdf.set_fill_color(200, 200, 200)
-            pdf.set_font("Nanum", size=10)
-            cols = [("장소", 40), ("시간", 40), ("행사명", 90), ("인원", 15), ("부서", 50), ("상태", 20)]
-            for txt, width in cols:
-                pdf.cell(width, 8, txt, border=1, align='C', fill=True)
-            pdf.ln()
-            
-            # 데이터 행
-            for _, row in bu_df.iterrows():
-                pdf.cell(40, 8, str(row['장소']), border=1, align='C')
-                pdf.cell(40, 8, str(row['시간']), border=1, align='C')
-                pdf.cell(90, 8, str(row['행사명']), border=1, align='L')
-                pdf.cell(15, 8, str(row['인원']), border=1, align='C')
-                pdf.cell(50, 8, str(row['부서']), border=1, align='C')
-                pdf.cell(20, 8, str(row['상태']), border=1, align='C')
-                pdf.ln()
-            pdf.ln(5)
-            
+    # 테이블 헤더 설정
+    cols = [("날짜", 20), ("장소", 35), ("시간", 35), ("행사명", 85), ("인원", 15), ("부서", 45), ("상태", 20)]
+    pdf.set_fill_color(200, 200, 200)
+    pdf.set_font("Nanum", size=10)
+    for txt, width in cols:
+        pdf.cell(width, 10, txt, border=1, align='C', fill=True)
+    pdf.ln()
+
+    # 데이터 입력
+    pdf.set_font("Nanum", size=9)
+    for _, row in df.iterrows():
+        pdf.cell(20, 10, str(row['날짜']), border=1, align='C')
+        pdf.cell(35, 10, str(row['장소']), border=1, align='C')
+        pdf.cell(35, 10, str(row['시간']), border=1, align='C')
+        pdf.cell(85, 10, str(row['행사명']), border=1, align='L')
+        pdf.cell(15, 10, str(row['인원']), border=1, align='C')
+        pdf.cell(45, 10, str(row['부서']), border=1, align='C')
+        pdf.cell(20, 10, str(row['상태']), border=1, align='C')
+        pdf.ln()
+        
     return pdf.output()
 
-# --- 실행 로직 ---
+# --- 사이드바 필터 구역 ---
 st.sidebar.title("🔍 대관 조회 필터")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=now_today)
 
+# 건물 선택 필터 복구
+selected_bu = st.sidebar.multiselect("조회 건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
+
 all_df = get_data(start_selected, end_selected)
 
-# PDF 저장 버튼
+# 선택된 건물만 필터링
+if not all_df.empty:
+    display_df = all_df[all_df['건물명'].isin(selected_bu)]
+else:
+    display_df = pd.DataFrame()
+
+# PDF 다운로드 버튼
 if st.sidebar.button("📄 PDF 생성하기"):
-    if not all_df.empty:
-        pdf_bytes = create_pdf(all_df, f"성의교정 대관 현황 ({start_selected}~{end_selected})")
+    if not display_df.empty:
+        pdf_bytes = create_pdf(display_df, f"성의교정 대관 현황 ({start_selected} ~ {end_selected})")
         if pdf_bytes:
             st.sidebar.download_button(
                 label="📥 PDF 다운로드",
@@ -133,18 +132,20 @@ if st.sidebar.button("📄 PDF 생성하기"):
                 mime="application/pdf"
             )
     else:
-        st.sidebar.warning("데이터가 없습니다.")
+        st.sidebar.warning("조회된 데이터가 없습니다.")
 
-# 메인 화면 표시
+# --- 메인 화면 렌더링 ---
 st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황 ({start_selected} ~ {end_selected})</div>', unsafe_allow_html=True)
 
-if not all_df.empty:
-    for bu in BUILDING_ORDER:
-        bu_df = all_df[all_df['건물명'] == bu]
+if not display_df.empty:
+    for bu in selected_bu:
+        bu_df = display_df[display_df['건물명'] == bu]
         st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
         if not bu_df.empty:
-            st.write(bu_df[['날짜', '장소', '시간', '행사명', '부서', '상태']])
+            # 첫 번째 셀에 숫자(인덱스)가 나오지 않도록 처리
+            html_table = bu_df[['날짜', '장소', '시간', '행사명', '인원', '부서', '상태']].to_html(index=False, classes='custom-table', escape=False)
+            st.markdown(html_table, unsafe_allow_html=True)
         else:
-            st.write("대관 내역이 없습니다.")
+            st.write("해당 건물의 대관 내역이 없습니다.")
 else:
-    st.info("해당 기간에 대관 내역이 없습니다.")
+    st.info("조건에 맞는 대관 내역이 없습니다.")
