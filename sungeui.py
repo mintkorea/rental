@@ -31,7 +31,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 사이드바 필터 (날짜 동기화 및 선택)
+# 3. 사이드바 필터
 st.sidebar.header("🔍 대관 조회 필터")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=now_today)
@@ -76,7 +76,7 @@ def get_clean_data(s_date, e_date):
 
 all_df = get_clean_data(start_selected, end_selected)
 
-# 5. 타이틀 로직 (요청하신 형식 반영)
+# 5. 타이틀 설정
 if start_selected == end_selected:
     display_title = f"성의교정 대관 현황 ({start_selected})"
 else:
@@ -84,7 +84,7 @@ else:
 
 st.markdown(f'<div class="main-title">🏫 {display_title}</div>', unsafe_allow_html=True)
 
-# 6. 화면 출력 (웹은 상세하게)
+# 6. 화면 출력 및 데이터 수집 (웹: '부서' 포함 상세 표출)
 excel_data_list = []
 for bu in selected_bu:
     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
@@ -106,10 +106,12 @@ for bu in selected_bu:
     else:
         st.markdown('<p style="color:#999; font-size:13px; margin-left:15px; margin-bottom:30px;">조회된 내역이 없습니다.</p>', unsafe_allow_html=True)
 
-# 7. PDF 생성 (PDF는 간결하게 디자인 분리)
+# 7. PDF 생성 함수 (PDF: '부서' 제외 핵심만 출력)
 def create_pdf(df, title):
+    # 가로형(L) A4 설정
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
+    
     if os.path.exists(font_path):
         pdf.add_font("Nanum", "", font_path, uni=True)
         pdf.set_font("Nanum", size=16)
@@ -117,22 +119,22 @@ def create_pdf(df, title):
         pdf.set_font("Arial", size=16)
 
     pdf.add_page()
-    # 요청하신 타이틀 출력
     pdf.cell(0, 15, title, ln=True, align='C')
     pdf.ln(5)
     
-    # PDF용 핵심 컬럼 설정 (웹과 다르게 최소화)
-    cols = ["날짜", "시간", "장소", "행사명", "상태"]
-    widths = [25, 40, 50, 130, 20] # 가로 너비 조정
+    # PDF용 컬럼 설정 (부서 제외)
+    pdf_cols = ["날짜", "시간", "장소", "행사명", "상태"]
+    widths = [25, 45, 55, 125, 20]
     
     pdf.set_font("Nanum" if os.path.exists(font_path) else "Arial", size=10)
     pdf.set_fill_color(68, 68, 68) 
     pdf.set_text_color(255, 255, 255)
-    for i, col in enumerate(cols):
+    for i, col in enumerate(pdf_cols):
         pdf.cell(widths[i], 10, col, border=1, align='C', fill=True)
     pdf.ln()
     
     pdf.set_text_color(0, 0, 0)
+    pdf.set_font("Nanum" if os.path.exists(font_path) else "Arial", size=9)
     for _, row in df.iterrows():
         pdf.cell(widths[0], 9, str(row['날짜']), border=1, align='C')
         pdf.cell(widths[1], 9, str(row['시간']), border=1, align='C')
@@ -140,9 +142,10 @@ def create_pdf(df, title):
         pdf.cell(widths[3], 9, str(row['행사명'])[:55], border=1, align='L')
         pdf.cell(widths[4], 9, str(row['상태']), border=1, align='C')
         pdf.ln()
-        if pdf.get_y() > 180: # 페이지 넘김
-            pdf.add_page()
-    return pdf.output(dest='S')
+        if pdf.get_y() > 180: pdf.add_page()
+        
+    # [핵심 해결] bytearray를 bytes로 변환하여 반환
+    return bytes(pdf.output(dest='S'))
 
 # 8. 저장 버튼 (사이드바)
 if excel_data_list:
@@ -155,9 +158,14 @@ if excel_data_list:
         final_df.to_excel(writer, index=False)
     st.sidebar.download_button("📥 엑셀(Excel) 저장", out_ex.getvalue(), f"rental_{start_selected}.xlsx")
     
-    # PDF 다운로드 (웹과 다른 데이터셋 구성 가능)
+    # PDF 다운로드
     try:
-        pdf_output = create_pdf(final_df, display_title)
-        st.sidebar.download_button("📄 PDF 리포트 저장", pdf_output, f"rental_{start_selected}.pdf", "application/pdf")
+        pdf_bytes = create_pdf(final_df, display_title)
+        st.sidebar.download_button(
+            label="📄 PDF 리포트 저장",
+            data=pdf_bytes,
+            file_name=f"Seongui_Rental_{start_selected}.pdf",
+            mime="application/pdf"
+        )
     except Exception as e:
         st.sidebar.error(f"PDF 생성 오류: {e}")
