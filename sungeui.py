@@ -12,22 +12,18 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 중복 노출 방지 핵심 로직
+# 2. CSS 설정 (시간 중복 방지 및 레이아웃 유지)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
-    
     .main-title { font-size: 26px !important; font-weight: 800; color: #002D56; margin-bottom: 20px; }
     .building-header { font-size: 19px !important; font-weight: 700; color: #2E5077; margin-top: 25px; }
-
     .custom-table { width: 100% !important; border-collapse: collapse; table-layout: fixed !important; }
     .custom-table th { background-color: #444 !important; color: white !important; font-size: 13px; padding: 10px 2px; }
     .custom-table td { border: 1px solid #eee; padding: 8px 4px !important; font-size: 13px; vertical-align: middle; line-height: 1.4; }
-
-    /* [해결책] 디스플레이 설정 강제화 */
+    
     .pc-time { display: block !important; }
     .mobile-time { display: none !important; }
-
     .t-center { text-align: center !important; }
     .t-left { text-align: left !important; padding-left: 8px !important; }
 
@@ -38,7 +34,6 @@ st.markdown("""
     .w-dept { width: 17%; }
     .w-status { width: 8%; }
 
-    /* 모바일 환경에서만 PC 시간을 숨기고 모바일 시간을 보여줌 */
     @media (max-width: 768px) {
         .pc-time { display: none !important; }
         .mobile-time { display: block !important; font-size: 10px; font-weight: bold; line-height: 1.1; }
@@ -57,7 +52,7 @@ end_selected = st.sidebar.date_input("종료일", value=now_today)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 selected_bu = st.sidebar.multiselect("조회 건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-# 4. 데이터 로직 (정렬 순서: 날짜 -> 시간)
+# 4. 데이터 로직 (요일 필터링 보강)
 @st.cache_data(ttl=60)
 def get_clean_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -72,21 +67,34 @@ def get_clean_data(s_date, e_date):
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
+            # [중요] 해당 대관 건의 허용 요일 리스트 생성 (예: '1,2,3' -> ['1', '2', '3'])
+            # 1:월, 2:화, 3:수, 4:목, 5:금, 6:토, 7:일
+            allow_days = str(item.get('allowDay', '')).split(',')
+            allow_days = [d.strip() for d in allow_days if d.strip()]
+            
             curr = s_dt
             while curr <= e_dt:
+                # 사용자가 선택한 기간 내에 있는지 확인
                 if s_date <= curr <= e_date:
-                    rows.append({
-                        'raw_date': curr,
-                        'raw_time': item.get('startTime', '00:00'),
-                        '날짜': curr.strftime('%m-%d'),
-                        '건물명': str(item.get('buNm', '')).strip(),
-                        '장소': item.get('placeNm', ''),
-                        '시작': item.get('startTime', ''),
-                        '종료': item.get('endTime', ''),
-                        '행사명': item.get('eventNm', ''),
-                        '부서': item.get('mgDeptNm', ''),
-                        '상태': '확정' if item.get('status') == 'Y' else '대기'
-                    })
+                    # 요일 체크 로직:
+                    # 1. 당일 대관인 경우 무조건 포함
+                    # 2. 장기 대관인 경우, 현재 날짜의 요일(curr.weekday() + 1)이 allow_days에 포함되어야 함
+                    is_today_rental = (item['startDt'] == item['endDt'])
+                    current_weekday = str(curr.weekday() + 1)
+                    
+                    if is_today_rental or (not allow_days) or (current_weekday in allow_days):
+                        rows.append({
+                            'raw_date': curr,
+                            'raw_time': item.get('startTime', '00:00'),
+                            '날짜': curr.strftime('%m-%d'),
+                            '건물명': str(item.get('buNm', '')).strip(),
+                            '장소': item.get('placeNm', ''),
+                            '시작': item.get('startTime', ''),
+                            '종료': item.get('endTime', ''),
+                            '행사명': item.get('eventNm', ''),
+                            '부서': item.get('mgDeptNm', ''),
+                            '상태': '확정' if item.get('status') == 'Y' else '대기'
+                        })
                 curr += timedelta(days=1)
         
         df = pd.DataFrame(rows)
@@ -114,12 +122,10 @@ for bu in selected_bu:
             html += '</tr></thead><tbody>'
             
             for _, r in bu_df.iterrows():
-                # [수정] HTML 구조 단순화하여 중복 렌더링 방지
                 time_html = f'''
                 <div class="pc-time">{r["시작"]} ~ {r["종료"]}</div>
                 <div class="mobile-time">{r["시작"]}<br>{r["종료"]}</div>
                 '''
-                
                 html += f'<tr><td class="w-date t-center">{r["날짜"]}</td>'
                 html += f'<td class="w-time t-center">{time_html}</td>'
                 html += f'<td class="w-place t-center">{r["장소"]}</td>'
