@@ -9,7 +9,7 @@ from fpdf import FPDF
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
+BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크",  "옴니버스 파크 의과대학", "옴니버스 파크 간호대학",  "대학본관", "서울성모별관"]
 
 # 2. CSS 설정 (웹 화면 가독성 및 모바일 대응)
 st.markdown("""
