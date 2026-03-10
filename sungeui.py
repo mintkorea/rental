@@ -14,26 +14,31 @@ now_today = datetime.now(KST).date()
 # 2. 건물 리스트 순서 고정
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
 
-# 3. CSS 설정: 홈페이지 셀 너비 최적화 (불필요한 공백 제거)
+# 3. CSS 설정: 모바일 대응 및 행사명 최대화 디자인
 st.markdown("""
 <style>
+    /* 기본 배경 및 폰트 설정 */
     .stApp { background-color: white; }
-    .main-title { font-size: 24px !important; font-weight: 800; color: #000; margin-bottom: 20px; text-align: center; }
-    .building-header { font-size: 18px !important; font-weight: 700; color: #000; margin-top: 25px; margin-bottom: 8px; }
+    .main-title { font-size: 22px !important; font-weight: 800; color: #000; margin-bottom: 15px; text-align: center; }
+    .building-header { font-size: 17px !important; font-weight: 700; color: #000; margin-top: 20px; margin-bottom: 5px; }
     
-    /* 웹 테이블 레이아웃 최적화 */
-    table { width: 100% !important; border-collapse: collapse; table-layout: fixed !important; }
-    th { background-color: #f2f2f2 !important; color: #333 !important; border: 1px solid #ccc !important; padding: 8px 4px !important; font-size: 13px; }
-    td { border: 1px solid #eee !important; padding: 8px 4px !important; text-align: center; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 모바일 가로 스크롤 및 테이블 고정 레이아웃 */
+    .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100% !important; border-collapse: collapse; table-layout: fixed !important; min-width: 650px; }
+    th { background-color: #f2f2f2 !important; color: #333 !important; border: 1px solid #ccc !important; padding: 6px 2px !important; font-size: 12px; }
+    td { border: 1px solid #eee !important; padding: 8px 4px !important; text-align: center; font-size: 12px; vertical-align: middle; }
     
-    /* 홈페이지 컬럼별 너비 강제 지정 (행사명 최대화) */
-    th:nth-child(1), td:nth-child(1) { width: 70px; }  /* 날짜 */
-    th:nth-child(2), td:nth-child(2) { width: 120px; } /* 장소 */
-    th:nth-child(3), td:nth-child(3) { width: 100px; } /* 시간 */
-    th:nth-child(4), td:nth-child(4) { width: auto; text-align: left; } /* 행사명 (유동적) */
-    th:nth-child(5), td:nth-child(5) { width: 50px; }  /* 인원 */
-    th:nth-child(6), td:nth-child(6) { width: 120px; } /* 부서 */
-    th:nth-child(7), td:nth-child(7) { width: 60px; }  /* 상태 */
+    /* 행사명은 길어지면 다음 줄로 넘어가도록 설정 (모바일 배려) */
+    .event-col { text-align: left !important; white-space: normal !important; word-break: keep-all; line-height: 1.4; }
+
+    /* 웹/모바일 컬럼별 너비 최적화 */
+    th:nth-child(1), td:nth-child(1) { width: 55px; }  /* 날짜 */
+    th:nth-child(2), td:nth-child(2) { width: 95px; }  /* 장소 */
+    th:nth-child(3), td:nth-child(3) { width: 90px; }  /* 시간 */
+    th:nth-child(4), td:nth-child(4) { width: auto; }  /* 행사명 (자유 확장) */
+    th:nth-child(5), td:nth-child(5) { width: 40px; }  /* 인원 */
+    th:nth-child(6), td:nth-child(6) { width: 100px; } /* 부서 */
+    th:nth-child(7), td:nth-child(7) { width: 50px; }  /* 상태 */
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,10 +61,10 @@ def get_data(s_date, e_date):
                 if s_date <= curr <= e_date:
                     if (item['startDt'] == item['endDt']) or (not allow_days) or (str(curr.weekday()+1) in allow_days):
                         rows.append({
-                            '날짜': curr.strftime('%m-%d'), # 연도 제외하여 슬림하게
+                            '날짜': curr.strftime('%m-%d'),
                             '건물명': str(item.get('buNm', '')).strip(),
                             '장소': item.get('placeNm', ''), 
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}", # 공백 제거
+                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
                             '행사명': item.get('eventNm', ''), 
                             '인원': item.get('peopleCount', ''),
                             '부서': item.get('mgDeptNm', ''),
@@ -73,7 +78,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 5. PDF 생성 함수 (시간 줄이고 행사명 늘림)
+# 5. PDF 생성 함수 (시간 줄이고 행사명 대폭 확장)
 def create_pdf(df, title_text):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -94,13 +99,12 @@ def create_pdf(df, title_text):
             if bu_df.empty: continue
             
             pdf.set_font("Nanum", size=12)
-            pdf.cell(0, 10, f"{bu}(2026-{date})", ln=True) # PDF엔 연도 포함
+            pdf.cell(0, 10, f"{bu}(2026-{date})", ln=True)
             
-            # PDF 컬럼 너비 재설정 (전체 합 277mm)
-            # 장소(40), 시간(30로 축소), 행사명(117로 확장), 인원(10), 부서(60), 상태(20)
+            # PDF 컬럼 너비 최적화: 시간(28), 행사명(124), 인원(10)
             pdf.set_fill_color(220, 220, 220)
             pdf.set_font("Nanum", size=10)
-            cols = [("장소", 40), ("시간", 30), ("행사명", 117), ("인원", 10), ("부서", 60), ("상태", 20)]
+            cols = [("장소", 40), ("시간", 28), ("행사명", 124), ("인원", 10), ("부서", 55), ("상태", 20)]
             for txt, width in cols:
                 pdf.cell(width, 10, txt, border=1, align='C', fill=True)
             pdf.ln()
@@ -108,26 +112,24 @@ def create_pdf(df, title_text):
             pdf.set_font("Nanum", size=9)
             for _, row in bu_df.iterrows():
                 pdf.cell(40, 10, str(row['장소']), border=1, align='C')
-                pdf.cell(30, 10, str(row['시간']), border=1, align='C')
-                pdf.cell(117, 10, " " + str(row['행사명']), border=1, align='L') # 좌측 여백 살짝
+                pdf.cell(28, 10, str(row['시간']), border=1, align='C')
+                pdf.cell(124, 10, " " + str(row['행사명']), border=1, align='L') 
                 pdf.cell(10, 10, str(row['인원']), border=1, align='C')
-                pdf.cell(60, 10, str(row['부서']), border=1, align='C')
+                pdf.cell(55, 10, str(row['부서']), border=1, align='C')
                 pdf.cell(20, 10, str(row['상태']), border=1, align='C')
                 pdf.ln()
             pdf.ln(6)
             
     return pdf.output()
 
-# --- 실행 로직 ---
-st.sidebar.title("🔍 검색 설정")
-start_selected = st.sidebar.date_input("시작일", value=now_today)
-end_selected = st.sidebar.date_input("종료일", value=now_today)
+# --- 메인 로직 ---
+st.sidebar.title("🔍 대관 조회")
+start_selected = st.sidebar.date_input("조회 시작일", value=now_today)
+end_selected = st.sidebar.date_input("조회 종료일", value=now_today)
 selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-if start_selected == end_selected:
-    display_title = f"성의교정 대관 현황 ({start_selected})"
-else:
-    display_title = f"성의교정 대관 현황 ({start_selected} ~ {end_selected})"
+# 타이틀 형식 (하루일 때와 기간일 때 구분)
+display_title = f"성의교정 대관 현황 ({start_selected})" if start_selected == end_selected else f"성의교정 대관 현황 ({start_selected} ~ {end_selected})"
 
 all_df = get_data(start_selected, end_selected)
 
@@ -145,8 +147,11 @@ if not all_df.empty:
         bu_df = all_df[all_df['건물명'] == bu]
         st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
         if not bu_df.empty:
-            # 웹 화면 출력용 컬럼 순서
-            st.markdown(bu_df[['날짜', '장소', '시간', '행사명', '인원', '부서', '상태']].to_html(index=False, escape=False), unsafe_allow_html=True)
+            # 테이블을 가로 스크롤 컨테이너로 감싸 모바일 대응
+            table_html = bu_df[['날짜', '장소', '시간', '행사명', '인원', '부서', '상태']].to_html(index=False, escape=False)
+            # 행사명 열에 'event-col' 클래스 강제 삽입 (문자열 치환)
+            table_html = table_html.replace('<td>', '<td class="event-col">', 4) # 행사명 열 위치에 맞게 조정 필요시 CSS nth-child 활용
+            st.markdown(f'<div class="table-container">{table_html}</div>', unsafe_allow_html=True)
         else:
             st.write("대관 내역이 없습니다.")
 else:
