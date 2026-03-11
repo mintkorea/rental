@@ -1,85 +1,100 @@
 import streamlit as st
+import google.generativeai as genai
+from PIL import Image
+import json
 from datetime import datetime
-import pandas as pd
 
-# 1. 페이지 설정 및 스타일
+# 1. 페이지 설정 및 디자인
 st.set_page_config(page_title="성의교정 식단 매니저", layout="centered")
 
-# CSS를 활용한 디자인 개선
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stButton>button { width: 100%; border-radius: 10px; height: 3em; background-color: #4CAF50; color: white; }
-    .menu-card { padding: 20px; border-radius: 15px; border-left: 5px solid #4CAF50; background-color: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .menu-card { padding: 20px; border-radius: 15px; border-left: 5px solid #4CAF50; 
+                background-color: white; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .highlight { border-left-color: #ff4b4b !important; background-color: #fff5f5; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. 현재 시간 및 요일 계산
+# 2. 사이드바 - 테스트 및 설정
+with st.sidebar:
+    st.header("🛠️ 개발자 설정")
+    test_mode = st.toggle("테스트 모드 활성화", value=True, help="AI 분석 대신 가짜 데이터를 사용합니다.")
+    st.divider()
+    # 가상 시간 설정 (큐레이션 테스트용)
+    test_time = st.slider("가상 시간 설정 (시)", 0, 23, datetime.now().hour)
+    
+    # 실제 API 키 (나중에 권한 해결 시 사용)
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
+
+# 3. 데이터 처리 로직
 now = datetime.now()
 days = ["월", "화", "수", "목", "금", "토", "일"]
 today_idx = now.weekday()
 today_str = days[today_idx]
-current_hour = now.hour
 
-# 3. 메인 헤더
-st.title("🍱 성의교정 실시간 식단 매니저")
-st.subheader(f"📅 오늘은 {now.strftime('%m월 %d일')} ({today_str}요일)")
+# 시간대별 강조 로직 (오후 2시 기준)
+focus_menu = "중식" if test_time < 14 else "석식"
 
-# 4. 시간대별 자동 큐레이션 로직
-# 오전 00시 ~ 오후 2시: 중식 강조
-# 오후 2시 ~ 오후 12시: 석식 강조
-if current_hour < 14:
-    recommendation = "🍴 지금은 **점심 메뉴**가 궁금하시겠네요!"
-    focus_menu = "중식"
-else:
-    recommendation = "🌙 지금은 **저녁 메뉴**를 확인할 시간입니다."
-    focus_menu = "석식"
-
-st.info(recommendation)
-
-# 5. 임시 데이터 (AI 분석 보류 동안 사용)
-# 분석 기능이 완성되면 st.session_state['menu_data']에서 읽어오게 됩니다.
-if 'menu_data' not in st.session_state:
-    # 테스트용 샘플 데이터
-    st.session_state['menu_data'] = {
-        "월": {"중식": "돈까스, 스프, 샐러드", "석식": "김치찌개, 계란말이"},
-        "화": {"중식": "비빔밥, 된장국", "석식": "제육볶음, 쌈채소"},
-        "수": {"중식": "짜장면, 탕수육", "석식": "볶음밥, 짬뽕국물"},
-        "목": {"중식": "육개장, 석박지", "석식": "고등어구이, 된장찌개"},
-        "금": {"중식": "카레라이스, 우동", "석식": "부대찌개, 라면사리"}
+# 4. 분석 함수
+def analyze_menu_mock():
+    # 테스트용 더미 데이터
+    return {
+        "월": {"중식": "수제돈까스, 크림스프", "석식": "스팸김치덮밥"},
+        "화": {"중식": "우거지해장국, 제육볶음", "석식": "닭갈비비빔밥"},
+        "수": {"중식": "해물쟁반짜장, 탕수육", "석식": "차돌된장찌개"},
+        "목": {"중식": "치킨마요덮밥, 미니우동", "석식": "고등어무조림"},
+        "금": {"중식": "곤드레밥, 달래양념장", "석식": "부대찌개, 라면사리"}
     }
 
-# 6. 식단 표시 UI
-st.divider()
+# 5. 메인 UI
+st.title("🍱 성의교정 실시간 식단 매니저")
+st.info(f"📅 오늘은 **{today_str}요일**입니다. ({'점심' if focus_menu == '중식' else '저녁'} 추천 시간)")
 
-# 요일 선택 (기본값은 오늘 요일)
-selected_day = st.selectbox("다른 요일 식단 보기", days[:5], index=today_idx if today_idx < 5 else 0)
+uploaded_file = st.file_uploader("식단표 이미지를 업로드하세요", type=['png', 'jpg', 'jpeg'])
 
-# 선택된 요일의 데이터 가져오기
-day_menu = st.session_state['menu_data'].get(selected_day, {"중식": "정보 없음", "석식": "정보 없음"})
+if uploaded_file:
+    img = Image.open(uploaded_file)
+    st.image(img, caption="업로드됨", use_container_width=True)
+    
+    if st.button("🚀 식단 분석 시작"):
+        if test_mode:
+            with st.spinner("테스트 모드로 데이터를 생성 중..."):
+                st.session_state['menu_data'] = analyze_menu_mock()
+                st.success("✅ 테스트 데이터 로드 완료!")
+        else:
+            # 실제 AI 분석 로직 (현재는 404 에러 가능성 있음)
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content(["식단을 JSON으로 추출해줘", img])
+                st.session_state['menu_data'] = json.loads(response.text)
+            except Exception as e:
+                st.error(f"분석 오류: {e}")
 
-col1, col2 = st.columns(2)
+# 6. 결과 전시 (데이터가 있을 때만 표시)
+if 'menu_data' in st.session_state:
+    st.divider()
+    # 요일 선택 (오늘 요일이 기본값)
+    selected_day = st.selectbox("요일 선택", days[:5], index=today_idx if today_idx < 5 else 0)
+    menu = st.session_state['menu_data'].get(selected_day, {})
 
-with col1:
-    # 현재 시간대에 따라 테두리 색상 등으로 강조 가능
-    is_lunch_time = (focus_menu == "중식" and selected_day == today_str)
-    title_suffix = " ⭐" if is_lunch_time else ""
-    st.markdown(f"""<div class="menu-card">
-        <h3>🍴 중식{title_suffix}</h3>
-        <p>{day_menu['중식']}</p>
-    </div>""", unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    
+    # 중식 카드
+    with col1:
+        is_focus = (focus_menu == "중식" and selected_day == today_str)
+        card_class = "menu-card highlight" if is_focus else "menu-card"
+        st.markdown(f"""<div class="{card_class}">
+            <h3>🍴 중식 {'⭐' if is_focus else ''}</h3>
+            <p>{menu.get('중식', '정보 없음')}</p>
+        </div>""", unsafe_allow_html=True)
 
-with col2:
-    is_dinner_time = (focus_menu == "석식" and selected_day == today_str)
-    title_suffix = " ⭐" if is_dinner_time else ""
-    st.markdown(f"""<div class="menu-card" style="border-left-color: #ff4b4b;">
-        <h3>🌙 석식{title_suffix}</h3>
-        <p>{day_menu['석식']}</p>
-    </div>""", unsafe_allow_html=True)
-
-# 7. 하단 유틸리티 (보류 중인 이미지 업로드 기능을 하단으로 배치)
-with st.expander("📷 식단표 이미지 업데이트 (AI 분석)"):
-    st.write("나중에 모델 권한 문제가 해결되면 이 기능을 다시 활성화합니다.")
-    uploaded_file = st.file_uploader("새로운 식단표 업로드", type=['png', 'jpg', 'jpeg'])
-    if st.button("이미지 분석 시도"):
-        st.warning("현재 모델 권한 확인 중입니다. 잠시 후 시도해 주세요.")
+    # 석식 카드
+    with col2:
+        is_focus = (focus_menu == "석식" and selected_day == today_str)
+        card_class = "menu-card highlight" if is_focus else "menu-card"
+        st.markdown(f"""<div class="{card_class}">
+            <h3>🌙 석식 {'⭐' if is_focus else ''}</h3>
+            <p>{menu.get('석식', '정보 없음')}</p>
+        </div>""", unsafe_allow_html=True)
