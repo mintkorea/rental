@@ -1,42 +1,33 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image
+from google.cloud import vision
 import json
 from datetime import datetime
-import easyocr
-import numpy as np
 
 # 1. API 설정
+# Gemini 키와 Google Cloud Vision 키(JSON)가 모두 필요할 수 있습니다.
 api_key = st.secrets.get("GEMINI_API_KEY")
 genai.configure(api_key=api_key)
 
-# 2. OCR 기반 분석 함수
-def analyze_menu_with_ocr(image):
-    # A. 이미지에서 텍스트 추출 (OCR)
-    reader = easyocr.Reader(['ko', 'en'])
-    img_array = np.array(image)
-    ocr_result = reader.readtext(img_array, detail=0)
-    extracted_text = " ".join(ocr_result)
-    
-    # B. 추출된 텍스트를 Gemini에게 전달 (이미지 없이 텍스트만!)
-    # 이 방식은 이미지 모델 권한 오류(404)를 원천 차단합니다.
+# 2. Vision API를 이용한 텍스트 추출 함수
+def get_text_from_vision(image_bytes):
+    # Streamlit Secrets에 저장된 서비스 계정 키를 사용합니다.
+    client = vision.ImageAnnotatorClient()
+    image = vision.Image(content=image_bytes)
+    response = client.text_detection(image=image)
+    texts = response.text_annotations
+    return texts[0].description if texts else ""
+
+# 3. 추출된 텍스트를 Gemini로 분석하는 함수
+def analyze_menu_text(extracted_text):
+    # 이미지가 아닌 '텍스트'만 보내기 때문에 404 에러가 나지 않습니다.
     model = genai.GenerativeModel('gemini-1.5-flash')
-    
     prompt = f"""
-    아래 텍스트는 식단표를 OCR로 읽은 결과야. 
-    여기서 요일별 중식과 석식 메뉴를 정리해서 JSON으로 응답해줘.
+    아래는 식단표 이미지에서 추출한 텍스트야. 요일별 중식, 석식 메뉴를 JSON으로 정리해줘.
     텍스트: {extracted_text}
     형식: {{"월": {{"중식": "..", "석식": ".."}}, ...}}
     """
-    
-    try:
-        response = model.generate_content(prompt)
-        res_text = response.text.strip()
-        if "{" in res_text:
-            res_text = res_text[res_text.find("{"):res_text.rfind("}")+1]
-        return json.loads(res_text)
-    except Exception as e:
-        raise e
+    response = model.generate_content(prompt)
+    return json.loads(response.text)
 
-# 3. 메인 UI (생략 - 동일)
-# ... 버튼 클릭 시 analyze_menu_with_ocr(img) 호출 ...
+# 4. 메인 UI (버튼 클릭 시 위 함수들을 순차 실행)
