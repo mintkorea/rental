@@ -1,150 +1,93 @@
 import streamlit as st
-import requests
-import pandas as pd
-from datetime import datetime, timedelta
-import pytz
-from fpdf import FPDF
+import google.generativeai as genai
+from PIL import Image
+import json
+from datetime import datetime
+import time
 
-# 1. 페이지 및 기본 설정
-st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
-KST = pytz.timezone('Asia/Seoul')
-now_today = datetime.now(KST).date()
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스 파크 의과대학", "옴니버스 파크 간호대학", "대학본관", "서울성모별관"]
+# 1. 페이지 설정
+st.set_page_config(page_title="스마트 식단 매니저", layout="centered")
 
-# 2. CSS 설정
-st.markdown("""
-<style>
-    .stApp { background-color: white; }
-    .main-title { font-size: 20px !important; font-weight: 800; text-align: center; margin-bottom: 15px; }
-    .building-header { font-size: 16px !important; font-weight: 700; margin-top: 25px; border-left: 5px solid #2E5077; padding-left: 10px; margin-bottom: 10px; }
-    .table-container { width: 100%; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; min-width: 600px; }
-    th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 6px; font-size: 11px; font-weight: bold; }
-    td { border: 1px solid #eee; padding: 8px 6px; font-size: 12px; text-align: center; }
-    .no-data { color: #666; font-size: 11px; padding: 10px; border: 1px solid #eee; text-align: center; }
-</style>
-""", unsafe_allow_html=True)
+# 2. API 키 설정
+api_key = st.secrets.get("GEMINI_API_KEY")
+if not api_key:
+    st.error("⚠️ Streamlit Secrets에 'GEMINI_API_KEY'를 등록해주세요.")
+    st.stop()
 
-# 3. 데이터 로드 함수 (요일 필터링 로직 반영)
-@st.cache_data(ttl=60)
-def get_data(s_date, e_date):
-    url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
-    params = {"mode": "getReservedData", "start": s_date.isoformat(), "end": e_date.isoformat()}
+genai.configure(api_key=api_key)
+
+# 3. 식단 분석 함수 (404 에러 우회 및 들여쓰기 교정)
+def analyze_menu(image):
+    # 'models/' 경로 이슈를 피하기 위해 가장 기본 모델명을 사용합니다.
+    # 만약 이래도 404가 나면 'gemini-pro-vision'으로 변경해 보세요.
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = """
+    이미지에서 요일별 식단(중식, 석식)을 추출해서 JSON으로 응답해줘.
+    형식: {"월": {"중식": "..", "석식": "..", "인사": ".."}, "화": {...}}
+    반드시 마크다운(```) 없이 순수 JSON 데이터만 출력해.
+    """
+    
     try:
-        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        raw = res.json().get('res', [])
-        rows = []
-        for item in raw:
-            if not item.get('startDt'): continue
-            s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
-            e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
-            # [수정] 요일 필터링을 위한 allowDay 리스트화
-            allowed_days = str(item.get('allowDay', '')).split(',')
-            allowed_days = [d.strip() for d in allowed_days if d.strip()]
-            
-            curr = s_dt
-            while curr <= e_dt:
-                if s_date <= curr <= e_date:
-                    # [수정] 현재 날짜의 요일(월=1...일=7)이 allowDay에 포함되는지 확인
-                    curr_weekday = str(curr.isoweekday())
-                    is_allowed = True
-                    if s_dt != e_dt and allowed_days: # 기간 대관일 때만 요일 체크
-                        if curr_weekday not in allowed_days:
-                            is_allowed = False
-                    
-                    if is_allowed:
-                        rows.append({
-                            '날짜': curr.strftime('%m-%d'),
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', ''), 
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', ''), 
-                            '인원': item.get('peopleCount', ''),
-                            '부서': item.get('mgDeptNm', ''),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
-                curr += timedelta(days=1)
-        df = pd.DataFrame(rows)
-        if not df.empty:
-            df['건물명'] = pd.Categorical(df['건물명'], categories=BUILDING_ORDER, ordered=True)
-            return df.sort_values(by=['날짜', '건물명', '시간'])
-        return df
-    except: return pd.DataFrame()
-
-# 4. PDF 생성 함수 (기존 소스 유지)
-def create_building_split_pdf(df, title_text, selected_buildings):
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
-    pdf.add_font("Nanum", "", "NanumGothic.ttf", uni=True)
-    pdf.add_page()
-    pdf.set_font("Nanum", size=16)
-    pdf.cell(0, 15, title_text, ln=True, align='C')
-    pdf.ln(5)
-
-    for bu in selected_buildings:
-        bu_df = df[df['건물명'] == bu]
-        pdf.set_font("Nanum", size=12)
-        pdf.set_text_color(46, 80, 119)
-        pdf.cell(0, 10, f"■ {bu}", ln=True, align='L')
-        pdf.set_text_color(0, 0, 0)
+        response = model.generate_content([prompt, image])
+        res_text = response.text.strip()
         
-        cols = [("장소", 40), ("시간", 35), ("행사명", 115), ("인원", 12), ("부서", 50), ("상태", 15)]
-        pdf.set_fill_color(240, 240, 240)
-        pdf.set_font("Nanum", size=10)
-        for txt, width in cols:
-            pdf.cell(width, 9, txt, border=1, align='C', fill=True)
-        pdf.ln()
-
-        pdf.set_font("Nanum", size=9)
-        if not bu_df.empty:
-            for _, row in bu_df.iterrows():
-                pdf.cell(40, 9, str(row['장소']), border=1, align='C')
-                pdf.cell(35, 9, str(row['시간']), border=1, align='C')
-                pdf.cell(115, 9, " " + str(row['행사명']), border=1, align='L')
-                pdf.cell(12, 9, str(row['인원']), border=1, align='C')
-                pdf.cell(50, 9, str(row['부서']), border=1, align='C')
-                pdf.cell(15, 9, str(row['상태']), border=1, align='C')
-                pdf.ln()
-        else:
-            pdf.cell(267, 9, "대관 내역이 없습니다.", border=1, align='C')
-            pdf.ln()
-        pdf.ln(12)
-    return bytes(pdf.output())
-
-# 5. 메인 UI 및 다운로드 버튼 로직
-st.sidebar.title("📅 조회 설정")
-start_selected = st.sidebar.date_input("조회 시작일", value=now_today)
-end_selected = st.sidebar.date_input("조회 종료일", value=now_today)
-selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-
-all_df = get_data(start_selected, end_selected)
-display_title = f"성의교정 대관 현황 ({start_selected})" if start_selected == end_selected else f"성의교정 대관 현황 ({start_selected} ~ {end_selected})"
-
-if not all_df.empty:
-    try:
-        pdf_bytes = create_building_split_pdf(all_df, display_title, selected_bu)
-        st.sidebar.download_button(
-            label="📥 PDF 즉시 저장",
-            data=pdf_bytes,
-            file_name=f"rental_{start_selected}.pdf",
-            mime="application/pdf"
-        )
+        # JSON 데이터 클렌징
+        if "{" in res_text:
+            res_text = res_text[res_text.find("{"):res_text.rfind("}")+1]
+            
+        return json.loads(res_text)
     except Exception as e:
-        st.sidebar.error(f"PDF 처리 중 오류: {str(e)}")
-else:
-    st.sidebar.info("조회된 내역이 없습니다.")
+        raise e
 
-# 6. 웹 화면 출력
-st.markdown(f'<div class="main-title">🏫 {display_title}</div>', unsafe_allow_html=True)
+# 4. 메인 UI
+st.title("🍱 성의교정 스마트 식단 매니저")
+st.write("식단표 이미지를 업로드하면 오늘 메뉴를 쏙 뽑아드려요!")
 
-if not all_df.empty:
-    for bu in selected_bu:
-        bu_df = all_df[all_df['건물명'] == bu]
-        st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
-        if not bu_df.empty:
-            rows_html = "".join([f"<tr><td>{r['날짜']}</td><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
-            st.markdown(f'<div class="table-container"><table><thead><tr><th>날짜</th><th>장소</th><th>시간</th><th>행사명</th><th>인원</th><th>부서</th><th>상태</th></tr></thead><tbody>{rows_html}</tbody></table></div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="no-data">해당 건물에 조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-else:
-    st.info("조회된 기간에 전체 대관 내역이 없습니다.")
+uploaded_file = st.file_uploader("주간 식단표 이미지를 올려주세요", type=['png', 'jpg', 'jpeg'])
+
+if uploaded_file:
+    img = Image.open(uploaded_file)
+    st.image(img, caption="업로드된 식단표", use_container_width=True)
+    
+    if st.button("🚀 식단 분석 시작"):
+        with st.spinner('AI가 식단을 정밀 분석 중입니다...'):
+            try:
+                # 분석 실행
+                result = analyze_menu(img)
+                st.session_state['menu_data'] = result
+                st.success("✅ 분석 완료!")
+                st.rerun()
+            except Exception as e:
+                # 에러 메시지별 맞춤 안내
+                err_msg = str(e)
+                st.error(f"❌ 오류 발생: {err_msg}")
+                if "404" in err_msg:
+                    st.info("💡 모델 인식 오류입니다. 잠시 후 다시 시도하거나 모델명을 변경해야 합니다.")
+                elif "429" in err_msg:
+                    st.info("💡 할당량 초과입니다. 약 5분 뒤에 다시 시도해 주세요.")
+
+# 5. 결과 표시
+if 'menu_data' in st.session_state:
+    days = ["월", "화", "수", "목", "금", "토", "일"]
+    today_str = days[datetime.now().weekday()]
+    
+    st.divider()
+    st.header(f"📅 오늘의 식단 ({today_str}요일)")
+    
+    menu = st.session_state['menu_data'].get(today_str, {})
+    if menu:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.info(f"🍴 **중식**\n\n{menu.get('중식', '정보 없음')}")
+        with col2:
+            st.error(f"🌙 **석식**\n\n{menu.get('석식', '정보 없음')}")
+        
+        if menu.get("인사"):
+            st.chat_message("assistant").write(menu["인사"])
+    else:
+        st.warning(f"{today_str}요일 식단 정보가 없습니다.")
+        
+    # 데이터 확인용
+    with st.expander("📝 전체 데이터 보기"):
+        st.json(st.session_state['menu_data'])
