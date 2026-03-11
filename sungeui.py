@@ -1,98 +1,132 @@
 import streamlit as st
 from datetime import datetime
 
-# 1. 페이지 설정 (가장 먼저 실행)
+# 1. 페이지 설정 및 성의교정 테마 (Deep Green) 적용
 st.set_page_config(page_title="성의교정 식단 매니저", layout="centered")
 
-# 2. 디자인 적용 (카드 스타일)
 st.markdown("""
     <style>
-    .menu-card { 
-        padding: 20px; border-radius: 15px; border-left: 8px solid #4CAF50; 
-        background-color: white; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-        margin-bottom: 20px; min-height: 150px;
+    /* 전체 배경색 (연한 그레이) */
+    .main { background-color: #F9FAFB; }
+    
+    /* 카드 기본 스타일 (화이트, 그림자, 둥근 모서리) */
+    .menu-card {
+        background-color: white;
+        padding: 24px;
+        border-radius: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+        border: 1px solid #E5E7EB;
+        transition: all 0.3s ease;
     }
-    .focus-card { 
-        border-left-color: #FF5252 !important; 
-        background-color: #FFF8F8; 
-        box-shadow: 0 6px 15px rgba(255, 82, 82, 0.2);
+    
+    /* 현재 시간대 카드 강조 (딥 그린 테두리, 연한 그린 배경) */
+    .focus-card {
+        border: 2px solid #2E7D32 !important;
+        background-color: #F1F8E9;
+        transform: translateY(-3px); /* 살짝 떠오르는 효과 */
+        box-shadow: 0 6px 20px rgba(46, 125, 50, 0.15);
     }
-    h3 { margin-top: 0; color: #333; }
-    p { font-size: 1.1rem; color: #555; line-height: 1.6; }
+    
+    /* 카드 헤더 (아이콘 + 타이틀) */
+    .card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 18px;
+        border-bottom: 1px solid #E5E7EB;
+        padding-bottom: 10px;
+    }
+    
+    /* 타이틀 폰트 */
+    .card-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #111827;
+        margin: 0;
+    }
+    
+    /* 메뉴 텍스트 폰트 (가독성 중시) */
+    .menu-text {
+        font-size: 1.1rem;
+        color: #4B5563;
+        line-height: 1.8;
+        white-space: pre-wrap; /* 줄바꿈 유지 */
+    }
+    
+    /* '추천' 배지 스타일 */
+    .badge {
+        background-color: #2E7D32;
+        color: white;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        margin-left: auto; /* 오른쪽 끝 배치 */
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. 테스트용 데이터 정의
-def get_test_data():
-    return {
-        "월": {"중식": "수제 돈까스, 스프, 샐러드", "석식": "매콤 제육볶음밥, 미역국"},
-        "화": {"중식": "진한 사골순댓국, 깍두기", "석식": "안동찜닭, 당면사리"},
-        "수": {"중식": "특식: 해물쟁반짜장, 탕수육", "석식": "순두부찌개, 계란말이"},
-        "목": {"중식": "소불고기 덮밥, 겉절이", "석식": "고등어구이, 된장찌개"},
-        "금": {"중식": "치킨마요, 미니우동", "석식": "얼큰 부대찌개, 라면사리"}
-    }
-
-# [핵심] 앱 실행 즉시 데이터가 없으면 무조건 테스트 데이터를 집어넣습니다.
-if 'menu_data' not in st.session_state or st.session_state['menu_data'] is None:
-    st.session_state['menu_data'] = get_test_data()
-
-# 4. 날짜 및 시간 설정
+# 2. 시간 및 요일 데이터 계산
 now = datetime.now()
-days = ["월", "화", "수", "목", "금", "토", "일"]
-today_idx = now.weekday()
-today_str = days[today_idx]
 current_hour = now.hour
+is_lunch_time = current_hour < 14  # 오후 2시 기준
 
-# 5. 메인 화면 구성
-st.title("🍱 성의교정 실시간 식단")
-st.write(f"📅 오늘은 **{today_str}요일**입니다. (현재 시간: {current_hour}시)")
+# 요일 표시 (테스트용으로 오늘 요일 고정)
+days = ["월", "화", "수", "목", "금", "토", "일"]
+today_str = days[now.weekday()]
 
-# 6. 식단 표시 섹션 (업로드 버튼보다 위에 배치하여 바로 보이게 함)
+# 3. 테스트용 식단 데이터 (보류 중인 AI 기능 대신 노출)
+# 실제 앱에서는 이 부분이 AI 분석 결과나 DB 데이터로 대체됩니다.
+menu = {
+    "중식": "• 수제 등심 돈까스 & 브라운 소스\n• 고소한 크림 스프\n• 오리엔탈 드레싱 가든 샐러드\n• 포기김치",
+    "석식": "• 매콤 달콤 제육볶음밥\n• 맑은 콩나물국\n• 계란후라이 (완숙)\n• 깍두기"
+}
+
+# 4. 메인 UI 구성
+st.title("🍱 성의교정 스마트 식단")
+st.markdown(f"#### 📅 오늘은 **{today_str}요일**입니다.")
+st.write("바쁜 일과 속, 오늘 당신의 에너지를 책임질 식단을 확인하세요.")
+
 st.divider()
 
-# 요일 선택 박스 (기본값은 오늘 요일)
-# 주말(토,일)일 경우 월요일(0)을 기본값으로 보여줍니다.
-selected_day = st.selectbox("📅 다른 요일 식단 보기", days[:5], index=today_idx if today_idx < 5 else 0)
-menu = st.session_state['menu_data'].get(selected_day, {"중식": "데이터 없음", "석식": "데이터 없음"})
-
+# 5. 카드 레이아웃 구성 (2열 배분)
 col1, col2 = st.columns(2)
 
-# 오후 2시(14시) 이전이면 점심 강조, 이후면 저녁 강조
-is_lunch_time = current_hour < 14
-
 with col1:
-    # 오늘 날짜이고 점심 시간일 때 강조
-    is_focus = (is_lunch_time and selected_day == today_str)
-    card_class = "menu-card focus-card" if is_focus else "menu-card"
-    st.markdown(f"""<div class="{card_class}">
-        <h3>🍴 중식 {'<span style="color:#FF5252;">⭐</span>' if is_focus else ''}</h3>
-        <hr>
-        <p>{menu['중식']}</p>
-    </div>""", unsafe_allow_html=True)
+    # 중식 카드 (오전~점심시간 강조)
+    # 현재 시간이 14시 이전이면 'focus-card' 클래스를 추가하여 강조합니다.
+    focus_class = "focus-card" if is_lunch_time else ""
+    badge_html = '<span class="badge">추천 🍴</span>' if is_lunch_time else ""
+    
+    st.markdown(f"""
+        <div class="menu-card {focus_class}">
+            <div class="card-header">
+                <span style="font-size: 1.8rem;">🍴</span>
+                <h3 class="card-title">중식</h3>
+                {badge_html}
+            </div>
+            <p class="menu-text">{menu['중식']}</p>
+        </div>
+    """, unsafe_allow_html=True)
 
 with col2:
-    # 오늘 날짜이고 저녁 시간일 때 강조
-    is_focus = (not is_lunch_time and selected_day == today_str)
-    card_class = "menu-card focus-card" if is_focus else "menu-card"
-    st.markdown(f"""<div class="{card_class}">
-        <h3>🌙 석식 {'<span style="color:#FF5252;">⭐</span>' if is_focus else ''}</h3>
-        <hr>
-        <p>{menu['석식']}</p>
-    </div>""", unsafe_allow_html=True)
+    # 석식 카드 (오후~저녁시간 강조)
+    # 현재 시간이 14시 이후이면 강조합니다. 배지 색상을 주황색 계열로 차별화합니다.
+    focus_class = "focus-card" if not is_lunch_time else ""
+    badge_html = '<span class="badge" style="background-color: #F57C00;">추천 🌙</span>' if not is_lunch_time else ""
+    
+    st.markdown(f"""
+        <div class="menu-card {focus_class}">
+            <div class="card-header">
+                <span style="font-size: 1.8rem;">🌙</span>
+                <h3 class="card-title">석식</h3>
+                {badge_html}
+            </div>
+            <p class="menu-text">{menu['석식']}</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-# 7. 하단 업로드 섹션 (필요할 때만 열어서 사용)
+# 6. 하단 안내 (보류된 기능 표시)
 st.divider()
-with st.expander("📷 새로운 식단표 사진 업로드하기 (AI 분석)"):
-    st.info("현재 API 권한 확인 중입니다. 테스트 데이터를 통해 UI를 확인해 주세요.")
-    uploaded_file = st.file_uploader("이미지 선택", type=['png', 'jpg', 'jpeg'])
-    if uploaded_file and st.button("🚀 이미지 분석 (현재 비활성)"):
-        st.warning("API 연결이 필요합니다. 테스트 데이터를 사용 중입니다.")
-
-# 8. 개발자용 사이드바 테스트 도구
-with st.sidebar:
-    st.header("⚙️ 테스트 도구")
-    # 슬라이더를 움직여서 밤 시간으로 바꾸면 '석식' 카드가 강조되는지 확인할 수 있습니다.
-    virtual_hour = st.slider("가상 시간 설정", 0, 23, current_hour)
-    if virtual_hour != current_hour:
-        # 가상 시간을 선택하면 즉시 반영되도록 로직 수정 가능
-        st.info(f"설정된 시간: {virtual_hour}시")
+st.caption("※ 위 식단은 테스트 데이터입니다. 실제 AI 분석 기능은 현재 점검 중입니다.")
