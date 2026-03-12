@@ -95,3 +95,4 @@ if not all_df.empty:
                     """, unsafe_allow_html=True)
 else:
     st.info("조회된 내역이 없습니다.")
+
