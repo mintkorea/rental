@@ -4,57 +4,49 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# 1. 페이지 설정
+# 1. 페이지 설정 (줌을 막는 meta 태그를 삽입하지 않도록 기본값 유지)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
-# 2. 줌 기능 강제 활성화 및 표 디자인 (CSS)
+# 2. CSS 설정 (줌 방해 요소 제거 및 표 규격 강제)
 st.markdown("""
 <style>
-    /* 브라우저에게 확대를 허용하도록 강제 명령 */
-    @viewport { width: device-width; zoom: 1.0; user-scalable=yes; }
-    
-    /* 전체 폰트 크기 및 터치 조작 허용 */
+    /* 1. 줌 관련: 브라우저의 기본 확대 기능을 절대 건드리지 않음 */
     html, body { 
-        touch-action: manipulation !important; 
-        -ms-touch-action: manipulation !important;
+        overflow-x: auto !important; 
+        -webkit-overflow-scrolling: touch !important;
     }
 
-    .main-title { font-size: 22px; font-weight: 800; text-align: center; }
-    .date-header { font-size: 18px; font-weight: 800; padding: 10px; margin-top: 20px; border-bottom: 2px solid #eee; }
-    .date-sat { color: #007BFF; }
-    .date-sun { color: #FF0000; }
-
-    /* 표 레이아웃: 가로 스크롤을 유지하면서 찌그러짐 방지 */
-    .scroll-container { width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+    /* 2. 표 스타일: 장소보다 시간을 작게 설정 (요청사항 반영) */
+    .stTable { width: 100%; min-width: 850px !important; } /* 표 전체 최소 너비 고정 */
     
-    .custom-table { 
-        width: 100% !important; 
-        min-width: 900px !important; /* 표가 이 너비 아래로 절대 줄어들지 않음 */
+    /* HTML Table 전용 스타일 */
+    .fixed-table { 
+        width: 100%; 
+        min-width: 850px; 
         border-collapse: collapse; 
-        table-layout: fixed !important; 
+        table-layout: fixed; 
+    }
+    .fixed-table th, .fixed-table td { 
+        border: 1px solid #dee2e6; 
+        padding: 8px 4px; 
+        font-size: 13px; 
+        text-align: center;
+        vertical-align: middle;
     }
     
-    .custom-table th, .custom-table td { 
-        border: 1px solid #ddd; 
-        padding: 8px 4px; 
-        text-align: center; 
-        font-size: 13px; 
-        word-break: break-all; 
-    }
+    /* 열 너비 강제 배분 (시간 필드를 작게) */
+    .w-place { width: 120px; }
+    .w-time  { width: 85px; }  /* 시간 필드 최소화 */
+    .w-event { width: auto; }  /* 행사명은 남는 공간 확보 */
+    .w-dept  { width: 110px; }
+    .w-stat  { width: 50px; }
 
-    /* 열 너비 고정: 요청하신 대로 시간 필드를 장소보다 작게 설정 */
-    .c-place { width: 110px; }  /* 장소 */
-    .c-time  { width: 85px; }   /* 시간 (고정) */
-    .c-event { width: auto; }   /* 행사명 (남는 공간 다 차지) */
-    .c-count { width: 45px; }   /* 인원 */
-    .c-dept  { width: 110px; }  /* 부서 */
-    .c-stat  { width: 50px; }   /* 상태 */
-
-    .ov-text { line-height: 1.3; }
+    .date-sat { color: #007BFF; font-weight: bold; }
+    .date-sun { color: #FF0000; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로직 (성공했던 로직 유지)
+# 3. 데이터 로직 (성공했던 로직 동일 유지)
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -94,54 +86,55 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. 메인 화면
+# 4. 화면 출력 부분
+st.sidebar.title("조회 설정")
 s_date = st.sidebar.date_input("시작일", now_today)
 e_date = st.sidebar.date_input("종료일", s_date + timedelta(days=7))
-target_bu = st.sidebar.multiselect("건물 필터", BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+target_bu = st.sidebar.multiselect("건물 선택", BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
 all_df = get_data(s_date, e_date)
 
-st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
+st.title("🏫 성의교정 대관 현황")
 
 if not all_df.empty:
     for date in sorted(all_df['full_date'].unique()):
         day_df = all_df[all_df['full_date'] == date]
         w_num = day_df.iloc[0]['w_num']
-        c_class = "date-sat" if w_num == 5 else ("date-sun" if w_num == 6 else "")
-        st.markdown(f'<div class="date-header {c_class}">📅 {date} ({day_df.iloc[0]["요일"]})</div>', unsafe_allow_html=True)
+        c_name = "date-sat" if w_num == 5 else ("date-sun" if w_num == 6 else "")
+        
+        st.markdown(f'### <span class="{c_name}">📅 {date} ({day_df.iloc[0]["요일"]})</span>', unsafe_allow_html=True)
         
         for bu in target_bu:
             bu_df = day_df[day_df['건물명'] == bu]
             if not bu_df.empty:
-                st.write(f"🏢 **{bu}**")
+                st.info(f"🏢 {bu}")
                 
-                html = f"""
-                <div class="scroll-container">
-                    <table class="custom-table">
+                # 줌 기능을 위해 HTML 구조를 단순화하여 출력
+                html_code = f"""
+                <div style="overflow-x: auto;">
+                    <table class="fixed-table">
                         <thead>
                             <tr>
-                                <th class="c-place">장소</th>
-                                <th class="c-time">시간</th>
-                                <th class="c-event">행사명</th>
-                                <th class="c-count">인원</th>
-                                <th class="c-dept">부서</th>
-                                <th class="c-stat">상태</th>
+                                <th class="w-place">장소</th>
+                                <th class="w-time">시간</th>
+                                <th class="w-event">행사명</th>
+                                <th class="w-dept">부서</th>
+                                <th class="w-stat">상태</th>
                             </tr>
                         </thead>
                         <tbody>
                 """
                 for _, r in bu_df.iterrows():
-                    html += f"""
+                    html_code += f"""
                         <tr>
-                            <td><div class="ov-text">{r['장소']}</div></td>
+                            <td>{r['장소']}</td>
                             <td>{r['시간']}</td>
-                            <td style="text-align:left;"><div class="ov-text">{r['행사명']}</div></td>
-                            <td>{r['인원']}</td>
-                            <td><div class="ov-text">{r['부서']}</div></td>
+                            <td style="text-align:left;">{r['행사명']}</td>
+                            <td>{r['부서']}</td>
                             <td>{r['상태']}</td>
                         </tr>
                     """
-                html += "</tbody></table></div>"
-                st.markdown(html, unsafe_allow_html=True)
+                html_code += "</tbody></table></div>"
+                st.markdown(html_code, unsafe_allow_html=True)
 else:
-    st.info("조회된 데이터가 없습니다.")
+    st.write("조회된 데이터가 없습니다.")
