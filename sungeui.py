@@ -10,8 +10,12 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 요청하신 건물 리스트 추가 및 순서 조정
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
+# 건물 리스트 업데이트 (요청하신 옴니버스파크 상세 리스트 포함)
+BUILDING_ORDER = [
+    "성의회관", "의생명산업연구원", "옴니버스 파크", 
+    "옴니버스파크 의과대학", "옴니버스파크 간호대학", 
+    "대학본관", "서울성모별관"
+]
 
 # 2. CSS 설정 (디자인 유지)
 st.markdown("""
@@ -39,6 +43,7 @@ def get_data(s_date, e_date):
         for item in raw:
             if not item.get('startDt'): continue
             
+            # allowDay 요일 필터 처리
             allowed_weekdays = []
             if item.get('allowDay'):
                 allowed_weekdays = [int(d.strip()) for d in str(item['allowDay']).split(',') if d.strip()]
@@ -50,7 +55,6 @@ def get_data(s_date, e_date):
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
                     curr_weekday = curr.weekday() + 1 
-                    
                     if not allowed_weekdays or curr_weekday in allowed_weekdays:
                         rows.append({
                             '날짜': curr.strftime('%m-%d'),
@@ -72,7 +76,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. 건물별 PDF 생성 함수
+# 4. 건물별 PDF 생성 함수 (각 건물별 독립 표 생성)
 def create_split_pdf(df, title_text, selected_buildings):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_font("Nanum", "", "NanumGothic.ttf", uni=True)
@@ -83,9 +87,12 @@ def create_split_pdf(df, title_text, selected_buildings):
 
     for bu in selected_buildings:
         bu_df = df[df['건물명'] == bu]
+        
+        # 건물명 소제목 (소제목 형식: ■ 건물명)
         pdf.set_font("Nanum", size=12)
         pdf.cell(0, 10, f"■ {bu}", ln=True, align='L')
         
+        # 표 헤더 설정
         cols = [("장소", 40), ("시간", 35), ("행사명", 115), ("인원", 12), ("부서", 50), ("상태", 15)]
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font("Nanum", size=10)
@@ -93,6 +100,7 @@ def create_split_pdf(df, title_text, selected_buildings):
             pdf.cell(width, 9, txt, border=1, align='C', fill=True)
         pdf.ln()
 
+        # 표 내용
         pdf.set_font("Nanum", size=9)
         if not bu_df.empty:
             for _, row in bu_df.iterrows():
@@ -106,7 +114,9 @@ def create_split_pdf(df, title_text, selected_buildings):
         else:
             pdf.cell(267, 9, "대관 내역이 없습니다.", border=1, align='C')
             pdf.ln()
-        pdf.ln(10)
+        
+        pdf.ln(10) # 건물 간 간격 유지
+        
     return bytes(pdf.output())
 
 # 5. 메인 UI
@@ -114,16 +124,26 @@ st.sidebar.title("📅 대관 조회 설정")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=now_today)
 
-# 디폴트 선택을 성의회관, 의생명산업연구원으로 수정
-selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+# 디폴트 선택 변경 (성의회관, 의생명산업연구원)
+selected_bu = st.sidebar.multiselect(
+    "건물 필터", 
+    options=BUILDING_ORDER, 
+    default=["성의회관", "의생명산업연구원"]
+)
 
 all_df = get_data(start_selected, end_selected)
 display_title = f"성의교정 대관 현황 ({start_selected} ~ {end_selected})" if start_selected != end_selected else f"성의교정 대관 현황 ({start_selected})"
 
+# 🚀 PDF 즉시 다운로드 버튼
 if not all_df.empty:
     try:
         pdf_data = create_split_pdf(all_df, display_title, selected_bu)
-        st.sidebar.download_button(label="📥 PDF 즉시 저장", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
+        st.sidebar.download_button(
+            label="📥 PDF 즉시 저장", 
+            data=pdf_data, 
+            file_name=f"rental_{start_selected}.pdf", 
+            mime="application/pdf"
+        )
     except Exception as e:
         st.sidebar.error(f"PDF 생성 오류: {e}")
 else:
