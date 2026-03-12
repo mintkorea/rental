@@ -12,27 +12,27 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (전체 셸 길이 추가 30% 축소 및 폰트 최소화)
+# 2. CSS 설정 (부서 셸 50% 축소 및 초압축 레이아웃)
 st.markdown("""
 <style>
     html, body { min-width: 100%; overflow-x: auto; }
-    .main-title { font-size: 14px !important; font-weight: 800; text-align: center; margin-bottom: 3px; }
-    .date-header { font-size: 11px !important; font-weight: bold; background-color: #f0f2f6; padding: 2px 5px; border-left: 3px solid #2e5077; margin-top: 8px; }
-    .bu-header { font-size: 10.5px !important; font-weight: bold; margin: 4px 0 1px 0; border-left: 2px solid #2e5077; padding-left: 4px; }
+    .main-title { font-size: 13px !important; font-weight: 800; text-align: center; margin-bottom: 2px; }
+    .date-header { font-size: 10.5px !important; font-weight: bold; background-color: #f0f2f6; padding: 2px 4px; border-left: 3px solid #2e5077; margin-top: 6px; }
+    .bu-header { font-size: 10px !important; font-weight: bold; margin: 3px 0 1px 0; border-left: 2px solid #2e5077; padding-left: 4px; }
     
     .t-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     
-    /* 테이블 스타일: 폰트 9.5px 및 셸 높이 최소화 */
-    table { width: 100%; border-collapse: collapse; min-width: 400px; table-layout: fixed; }
-    th, td { border: 1px solid #dee2e6; padding: 1.5px 0.5px !important; font-size: 9.5px !important; line-height: 1.0; word-break: break-all; }
-    th { background-color: #f8f9fa; font-weight: bold; height: 18px; }
+    /* 테이블 스타일: 폰트 9px 및 여백 제로화 */
+    table { width: 100%; border-collapse: collapse; min-width: 380px; table-layout: fixed; }
+    th, td { border: 1px solid #dee2e6; padding: 1px 0.5px !important; font-size: 9px !important; line-height: 1.0; word-break: break-all; }
+    th { background-color: #f8f9fa; font-weight: bold; height: 16px; }
     
-    /* [최종 압축] 전체적으로 너비를 30% 더 축소한 배분 */
-    .w-place { width: 14%; }    /* 장소 */
-    .w-time  { width: 11%; }    /* 시간 */
-    .w-event { width: 35%; }    /* 행사명 (비중 유지하며 축소) */
+    /* [부서 50% 축소 반영] 너비 재배분 */
+    .w-place { width: 15%; }    /* 장소 */
+    .w-time  { width: 12%; }    /* 시간 */
+    .w-event { width: 48%; }    /* 행사명 (부서에서 줄인 폭을 여기에 집중 투자) */
     .w-count { width: 6%; }     /* 인원 */
-    .w-dept  { width: 28%; }    /* 부서 (내용 보존을 위해 남은 할당) */
+    .w-dept  { width: 13%; }    /* 부서 (기존 28% -> 13%로 50% 이상 축소) */
     .w-stat  { width: 6%; }     /* 상태 */
     
     .left { text-align: left !important; padding-left: 2px !important; }
@@ -73,14 +73,14 @@ def get_clean_data(s_date, e_date):
         return pd.DataFrame(rows).drop_duplicates()
     except: return pd.DataFrame()
 
-# 4. 사이드바 및 필터
+# 4. 사이드바 설정
 s_day = st.sidebar.date_input("시작", value=now_today)
 e_day = st.sidebar.date_input("종료", value=s_day)
 selected_bu = st.sidebar.multiselect("건물", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
 df = get_clean_data(s_day, e_day)
 
 # 5. 메인 출력
-st.markdown('<div class="main-title">🏫 대관 현황 (초압축 모드)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏫 대관 현황 (부서 압축 모드)</div>', unsafe_allow_html=True)
 
 if not df.empty:
     f_df = df[df['건물명'].isin(selected_bu)]
