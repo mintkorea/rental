@@ -4,29 +4,27 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# 1. 페이지 설정 (최상단)
+# 1. 페이지 설정 (가장 상단에 위치)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
 # 2. 줌(확대) 강제 활성화 및 표 디자인 CSS
+# touch-action: auto와 user-scalable: yes를 통해 브라우저 제어권을 확보합니다.
 st.markdown("""
 <style>
-    /* 모바일 브라우저의 줌 기능을 강제로 깨우는 설정 */
     html, body, [data-testid="stAppViewContainer"] {
         touch-action: auto !important;
         user-scalable: yes !important;
     }
-
-    .main-title { font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 20px; color: #1E3A5F; }
+    .main-title { font-size: 20px; font-weight: 800; text-align: center; margin-bottom: 10px; color: #1E3A5F; }
     .date-header { font-size: 18px; font-weight: 800; color: #1E3A5F; padding: 10px; background-color: #f0f2f6; border-left: 5px solid #2E5077; margin-top: 30px; }
-    .bu-header { font-size: 16px; font-weight: 700; margin: 15px 0 8px 0; color: #333; }
+    .bu-header { font-size: 15px; font-weight: 700; margin: 15px 0 8px 0; color: #333; border-bottom: 1px solid #ddd; width: fit-content; }
     
-    /* 표 레이아웃: 가로로 길게 유지하여 확대해서 보기 편하게 설정 */
     .table-container { width: 100%; overflow-x: auto !important; }
     table { width: 100%; border-collapse: collapse; min-width: 850px; table-layout: fixed; }
     th, td { border: 1px solid #ddd; padding: 10px 4px; text-align: center; font-size: 14px; vertical-align: middle; }
     th { background-color: #f8f9fa; font-weight: bold; }
     
-    /* 열 너비 고정: 시간 열을 장소보다 슬림하게 */
+    /* 요청하신 열 너비 최적화: 시간 열 슬림화 */
     .col-place { width: 120px; }
     .col-time  { width: 85px; } 
     .col-event { width: auto; }
@@ -73,7 +71,7 @@ def get_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 사이드바 및 필터 로직
+# 4. 사이드바 및 필터 (로직 단순화)
 st.sidebar.title("📅 대관 조회 필터")
 s_date = st.sidebar.date_input("시작일", now_today)
 e_date = st.sidebar.date_input("종료일", s_date)
@@ -81,44 +79,45 @@ selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, de
 
 raw_df = get_data(s_date, e_date)
 
-# 5. 메인 화면 출력
+# 5. 메인 화면 출력 (선택한 건물만 루프)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 if not raw_df.empty:
-    # 필터링 로직: 선택된 건물만 포함
+    # 필터링: 사용자가 선택한 건물이 포함된 데이터만 추출
     filtered_df = raw_df[raw_df['건물명'].isin(selected_bu)].copy()
     
-    for date in sorted(filtered_df['full_date'].unique()):
-        day_df = filtered_df[filtered_df['full_date'] == date]
-        st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
-        
-        # 건물 순서대로 출력
-        for bu in BUILDING_ORDER:
-            if bu in selected_bu:
-                bu_df = day_df[day_df['건물명'] == bu]
-                if not bu_df.empty:
-                    st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
-                    
-                    # HTML 표 생성
-                    table_html = f"""
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th class="col-place">장소</th><th class="col-time">시간</th><th class="col-event">행사명</th>
-                                    <th class="col-count">인원</th><th class="col-dept">부서</th><th class="col-stat">상태</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                    """
-                    for _, r in bu_df.iterrows():
-                        table_html += f"""
+    if not filtered_df.empty:
+        for date in sorted(filtered_df['full_date'].unique()):
+            day_df = filtered_df[filtered_df['full_date'] == date]
+            st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
+            
+            for bu in BUILDING_ORDER:
+                if bu in selected_bu:
+                    bu_df = day_df[day_df['건물명'] == bu]
+                    if not bu_df.empty:
+                        st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
+                        
+                        rows_html = "".join([f"""
                             <tr>
                                 <td>{r['장소']}</td><td>{r['시간']}</td><td class="text-left">{r['행사명']}</td>
                                 <td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td>
                             </tr>
-                        """
-                    table_html += "</tbody></table></div>"
-                    st.markdown(table_html, unsafe_allow_html=True)
+                        """ for _, r in bu_df.iterrows()])
+                        
+                        st.markdown(f"""
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th class="col-place">장소</th><th class="col-time">시간</th><th class="col-event">행사명</th>
+                                        <th class="col-count">인원</th><th class="col-dept">부서</th><th class="col-stat">상태</th>
+                                    </tr>
+                                </thead>
+                                <tbody>{rows_html}</tbody>
+                            </table>
+                        </div>
+                        """, unsafe_allow_html=True)
+    else:
+        st.info("선택한 건물의 대관 내역이 없습니다.")
 else:
     st.info("조회된 데이터가 없습니다.")
