@@ -156,4 +156,3 @@ if not all_df.empty:
                 st.markdown(f'<div class="table-container"><table><thead><tr><th>장소</th><th>시간</th><th>행사명</th><th>인원</th><th>부서</th><th>상태</th></tr></thead><tbody>{rows_html}</tbody></table></div>', unsafe_allow_html=True)
 else:
     st.info("조회된 내역이 없습니다.")
-
