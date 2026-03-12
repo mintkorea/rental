@@ -24,6 +24,7 @@ st.markdown("""
     table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; font-size: 13px; text-align: center; }
     td { border: 1px solid #eee; padding: 10px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
+    .no-data-text { color: #d9534f; font-size: 13px; padding: 10px; background-color: #fffafa; border: 1px solid #ffe3e3; border-radius: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,7 +64,7 @@ def get_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. PDF 생성 (세로 중앙 정렬 보정 버전)
+# 4. PDF 생성 (기존 로직 유지)
 def create_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -93,32 +94,20 @@ def create_pdf(df):
             
             pdf.set_font("Nanum", size=9) if os.path.exists(font_path) else pdf.set_font("Arial", size=9)
             for _, row in bu_df.iterrows():
-                line_height = 6 # 줄 사이 간격
+                line_height = 6
                 event_txt = " " + str(row['행사명'])
-                
-                # 줄 수 계산 및 행 높이 결정
                 lines = pdf.multi_cell(125, line_height, event_txt, split_only=True)
                 nb_lines = len(lines)
                 row_h = max(10, nb_lines * line_height)
-                
-                # 세로 중앙 정렬을 위한 여백(offset) 계산
-                # (전체 행 높이 - 실제 텍스트가 차지하는 높이) / 2
                 text_total_height = nb_lines * line_height
                 vertical_offset = (row_h - text_total_height) / 2
-
                 x, y = pdf.get_x(), pdf.get_y()
-                
-                # 1~2열 출력
                 pdf.cell(35, row_h, str(row['장소']), border=1, align='C')
                 pdf.cell(35, row_h, str(row['시간']), border=1, align='C')
-                
-                # 3열 (행사명) - 세로 중앙 정렬 적용
                 cur_x = pdf.get_x()
-                pdf.rect(cur_x, y, 125, row_h) # 칸 테두리
-                pdf.set_xy(cur_x, y + vertical_offset) # 좌표를 중앙으로 이동
+                pdf.rect(cur_x, y, 125, row_h)
+                pdf.set_xy(cur_x, y + vertical_offset)
                 pdf.multi_cell(125, line_height, event_txt, border=0, align='L')
-                
-                # 4~6열 출력 (좌표 복구)
                 pdf.set_xy(cur_x + 125, y)
                 pdf.cell(15, row_h, str(row['인원']), border=1, align='C')
                 pdf.cell(50, row_h, str(row['부서']), border=1, align='C')
@@ -135,30 +124,37 @@ sel_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default
 
 df = get_data(s_date, e_date)
 
-if not df.empty:
-    f_df = df[df['건물명'].isin(sel_bu)].copy()
-    if not f_df.empty:
-        # 건물 정렬
-        f_df['건물명'] = pd.Categorical(f_df['건물명'], categories=BUILDING_ORDER, ordered=True)
-        f_df = f_df.sort_values(by=['full_date', '건물명', '시간'])
+# 메인 타이틀 출력
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-        with st.sidebar:
-            # 💡 None 출력 방지 로직: if문 자체에서 UI를 생성하도록 수정
-            if st.button("📄 PDF 생성 및 준비"):
-                pdf_bytes = create_pdf(f_df)
-                st.download_button("📥 PDF 다운로드", data=pdf_bytes, file_name=f"rental_{s_date}.pdf", mime="application/pdf")
+# 날짜 범위 생성
+date_range = pd.date_range(s_date, e_date).strftime('%Y-%m-%d')
+
+for date in date_range:
+    d_df = df[df['full_date'] == date] if not df.empty else pd.DataFrame()
+    
+    # 해당 날짜의 요일 계산
+    d_obj = datetime.strptime(date, '%Y-%m-%d')
+    w_str = ['월','화','수','목','금','토','일'][d_obj.weekday()]
+    
+    st.markdown(f'<div class="date-header">📅 {date} ({w_str}요일)</div>', unsafe_allow_html=True)
+    
+    for b in sel_bu:
+        st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
+        b_df = d_df[d_df['건물명'] == b] if not d_df.empty else pd.DataFrame()
         
-        st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
-        for date in sorted(f_df['full_date'].unique()):
-            d_df = f_df[f_df['full_date'] == date]
-            st.markdown(f'<div class="date-header">📅 {date} ({d_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
-            for b in sel_bu:
-                b_df = d_df[d_df['건물명'] == b]
-                if not b_df.empty:
-                    st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
-                    table_html = "<table><thead><tr><th style='width:15%'>장소</th><th style='width:15%'>시간</th><th style='width:40%'>행사명</th><th style='width:7%'>인원</th><th style='width:15%'>부서</th><th style='width:8%'>상태</th></tr></thead><tbody>"
-                    for _, r in b_df.iterrows():
-                        table_html += f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>"
-                    st.markdown(table_html + "</tbody></table>", unsafe_allow_html=True)
-    else: st.info("선택한 건물에 내역이 없습니다.")
-else: st.info("조회된 내역이 없습니다.")
+        if not b_df.empty:
+            table_html = "<table><thead><tr><th style='width:15%'>장소</th><th style='width:15%'>시간</th><th style='width:40%'>행사명</th><th style='width:7%'>인원</th><th style='width:15%'>부서</th><th style='width:8%'>상태</th></tr></thead><tbody>"
+            for _, r in b_df.iterrows():
+                table_html += f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>"
+            st.markdown(table_html + "</tbody></table>", unsafe_allow_html=True)
+        else:
+            # 내역이 없는 경우 명시적 표시
+            st.markdown('<div class="no-data-text">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+
+# 사이드바 PDF 다운로드 버튼 (기존 로직 유지)
+if not df.empty:
+    with st.sidebar:
+        if st.button("📄 PDF 생성 및 준비"):
+            pdf_bytes = create_pdf(df[df['건물명'].isin(sel_bu)])
+            st.download_button("📥 PDF 다운로드", data=pdf_bytes, file_name=f"rental_{s_date}.pdf", mime="application/pdf")
