@@ -6,7 +6,7 @@ import pytz
 from fpdf import FPDF
 import os
 
-# 1. 페이지 및 기본 설정
+# 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -21,10 +21,9 @@ st.markdown("""
     .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 20px; color: #1E3A5F; }
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 12px 0; margin-top: 35px; border-bottom: 2px solid #2E5077; }
     .building-header { font-size: 15px !important; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; color: #333; }
-    .table-container { width: 100%; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; border: 1px solid #dee2e6; }
-    th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 12px 4px; font-size: 13px; font-weight: bold; text-align: center; color: #495057; }
-    td { border: 1px solid #eee; padding: 12px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
+    th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 12px 4px; font-size: 13px; font-weight: bold; text-align: center; }
+    td { border: 1px solid #eee; padding: 12px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-word; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,18 +63,16 @@ def get_data(s_date, e_date):
                         })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# 4. PDF 생성 함수 (중복 출력 방지 로직 적용)
+# 4. PDF 생성 함수 (겹침 현상 해결 버전)
 def create_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
     if os.path.exists(font_path):
         pdf.add_font("Nanum", "", font_path, uni=True)
         pdf.set_font("Nanum", size=10)
-    else:
-        pdf.set_font("Arial", size=10)
+    else: pdf.set_font("Arial", size=10)
 
     for date_val in sorted(df['full_date'].unique()):
         pdf.add_page()
@@ -99,36 +96,36 @@ def create_pdf(df):
             
             pdf.set_font("Nanum", size=9) if os.path.exists(font_path) else pdf.set_font("Arial", size=9)
             for _, row in bu_df.iterrows():
-                # 행의 최대 높이 계산을 위한 임시 측정
-                line_height = 7
-                event_txt = str(row['행사명'])
+                # 줄바꿈 높이 계산 (행사명 125mm 너비 기준)
+                line_h = 7
+                # 실제 출력 전 텍스트 높이 측정
+                test_pdf = FPDF(orientation='L', unit='mm', format='A4')
+                test_pdf.add_page()
+                if os.path.exists(font_path): test_pdf.add_font("Nanum", "", font_path, uni=True); test_pdf.set_font("Nanum", size=9)
                 
-                # 텍스트 길이에 따른 높이 측정 (실제 출력 X)
-                current_x = pdf.get_x()
-                current_y = pdf.get_y()
+                prev_y = test_pdf.get_y()
+                test_pdf.multi_cell(125, line_h, str(row['행사명']))
+                row_h = max(10, test_pdf.get_y() - prev_y) # 최소 높이 10mm
                 
-                # 가상 출력으로 높이만 계산
-                pdf.multi_cell(125, line_height, event_txt, border=0, align='L')
-                end_y = pdf.get_y()
-                row_height = max(10, end_y - current_y) # 최소 높이 10mm 보장
+                # 실제 출력
+                cur_x, cur_y = pdf.get_x(), pdf.get_y()
                 
-                # 실제 출력 위치로 복귀
-                pdf.set_xy(current_x, current_y)
+                # 1~2열 (장소, 시간)
+                pdf.cell(35, row_h, str(row['장소']), border=1, align='C')
+                pdf.cell(35, row_h, str(row['시간']), border=1, align='C')
                 
-                # 각 셀 출력 (높이 통일)
-                pdf.cell(35, row_height, str(row['장소']), border=1, align='C')
-                pdf.cell(35, row_height, str(row['시간']), border=1, align='C')
+                # 3열 (행사명 - MultiCell 처리)
+                evt_x, evt_y = pdf.get_x(), pdf.get_y()
+                pdf.rect(evt_x, evt_y, 125, row_h) # 테두리 먼저 그리기
+                pdf.multi_cell(125, line_h, " " + str(row['행사명']), border=0, align='L')
                 
-                # 행사명 (MultiCell은 좌표를 깨뜨리므로 위치 강제 지정)
-                cell_x, cell_y = pdf.get_x(), pdf.get_y()
-                pdf.rect(cell_x, cell_y, 125, row_height) # 테두리 먼저
-                pdf.multi_cell(125, line_height, event_txt, border=0, align='L')
+                # 4~6열 (인원, 부서, 상태 - 좌표 복구 후 출력)
+                pdf.set_xy(evt_x + 125, evt_y)
+                pdf.cell(15, row_h, str(row['인원']), border=1, align='C')
+                pdf.cell(50, row_h, str(row['부서']), border=1, align='C')
+                pdf.cell(15, row_h, str(row['상태']), border=1, align='C')
                 
-                pdf.set_xy(cell_x + 125, cell_y)
-                pdf.cell(15, row_height, str(row['인원']), border=1, align='C')
-                pdf.cell(50, row_height, str(row['부서']), border=1, align='C')
-                pdf.cell(15, row_height, str(row['상태']), border=1, align='C')
-                pdf.ln(row_height) # 다음 행으로 이동
+                pdf.set_y(evt_y + row_h) # 다음 행 위치 강제 지정
             pdf.ln(5)
     return bytes(pdf.output(dest='S'))
 
@@ -142,18 +139,15 @@ raw_df = get_data(start_selected, end_selected)
 
 if not raw_df.empty:
     filtered_df = raw_df[raw_df['건물명'].isin(selected_bu)].copy()
-    filtered_df['건물명'] = pd.Categorical(filtered_df['건물명'], categories=BUILDING_ORDER, ordered=True)
+    filtered_df['건물명'] = pd.Categorical(filtered_df['filtered_df' if 'filtered_df' in globals() else '건물명'], categories=BUILDING_ORDER, ordered=True)
     filtered_df = filtered_df.sort_values(by=['full_date', '건물명', '시간'])
 
     if not filtered_df.empty:
         with st.sidebar:
-            # None 표시 방지를 위해 버튼 클릭 시에만 PDF 처리
+            # 💡 [해결] None 문자열 표출 방지: if문 내부에서 바로 생성/다운로드 처리
             if st.button("📄 PDF 생성 및 준비"):
-                try:
-                    pdf_data = create_pdf(filtered_df)
-                    st.download_button("📥 PDF 다운로드", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
-                except Exception as e:
-                    st.error(f"PDF 생성 오류: {e}")
+                pdf_data = create_pdf(filtered_df)
+                st.download_button("📥 PDF 다운로드", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
 
         st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
         for date in sorted(filtered_df['full_date'].unique()):
@@ -163,10 +157,8 @@ if not raw_df.empty:
                 bu_df = day_df[day_df['건물명'] == bu]
                 if not bu_df.empty:
                     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
-                    header_html = '<div class="table-container"><table><thead><tr><th style="width:15%;">장소</th><th style="width:15%;">시간</th><th style="width:40%;">행사명</th><th style="width:7%;">인원</th><th style="width:15%;">부서</th><th style="width:8%;">상태</th></tr></thead><tbody>'
+                    header_html = '<table><thead><tr><th style="width:15%;">장소</th><th style="width:15%;">시간</th><th style="width:40%;">행사명</th><th style="width:7%;">인원</th><th style="width:15%;">부서</th><th style="width:8%;">상태</th></tr></thead><tbody>'
                     rows_html = "".join([f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
-                    st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
-    else:
-        st.info("선택한 건물에 내역이 없습니다.")
-else:
-    st.info("조회된 내역이 없습니다.")
+                    st.markdown(header_html + rows_html + "</tbody></table>", unsafe_allow_html=True)
+    else: st.info("선택한 건물에 내역이 없습니다.")
+else: st.info("조회된 내역이 없습니다.")
