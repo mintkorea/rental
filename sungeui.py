@@ -3,14 +3,13 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-from fpdf import FPDF
 
-# 1. 환경 설정
+# 1. 초기 설정 (다크모드 강제 방어)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 건물 목록 (공백 문제 해결을 위해 리스트 정비)
+# 건물 목록 (공백 및 매칭 오류 방지용 정비)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 st.markdown("""
@@ -25,27 +24,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. PDF 생성 함수 (에러가 나도 앱을 멈추지 않음)
-def create_pdf_safe(df, selected_buildings):
-    try:
-        pdf = FPDF()
-        pdf.add_page()
-        # 한글 폰트가 없을 경우를 대비해 기본 폰트 설정
-        pdf.set_font("Helvetica", size=12)
-        pdf.cell(200, 10, txt="Rental Status Report (No Korean Font Support)", ln=True, align='C')
-        # ... 데이터 기록 로직 (생략해도 앱은 생존함) ...
-        return pdf.output()
-    except Exception:
-        return None
-
-# 3. 사이드바 (기존 위치 고정)
+# 2. 사이드바 설정 (사용자 요청 위치 고정)
 with st.sidebar:
     st.header("📅 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
-# 4. 데이터 수집 및 화면 출력
+# 3. 데이터 로직 및 화면 출력
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 if sel_bu:
@@ -58,7 +44,8 @@ if sel_bu:
         rows = []
         for item in raw:
             if not item.get('startDt'): continue
-            # 필터링 정확도를 위해 공백 제거 매칭
+            
+            # [핵심] 건물명 공백 제거 매칭
             bu_nm = str(item.get('buNm', '')).replace(" ", "").strip()
             
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
@@ -79,26 +66,22 @@ if sel_bu:
     except:
         df = pd.DataFrame()
 
-    # 데이터가 비어있지 않다면 PDF 다운로드 버튼 시도 (에러 격리)
+    # 화면에 표 그리기
     if not df.empty:
-        pdf_data = create_pdf_safe(df, sel_bu)
-        if pdf_data:
-            st.download_button("📄 PDF 다운로드 (영어 버전)", data=pdf_data, file_name="rental.pdf")
-        else:
-            st.warning("⚠️ PDF 생성기에 문제가 발생했습니다. 화면의 표를 참고해 주세요.")
-
-        # 날짜별 표 출력
         for d_str in sorted(df['date'].unique()):
             st.markdown(f'<div class="date-header">📅 {d_str}</div>', unsafe_allow_html=True)
             for b in sel_bu:
                 st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
-                b_df = df[(df['date'] == d_str) & (df['building'] == b.replace(" ", "").strip())]
+                # 필터링 시에도 공백 제거 후 비교
+                b_df = df[(df['date'] == d_str) & (df['building'] == b.replace(" ", ""))]
                 if not b_df.empty:
                     html = "<table><thead><tr><th>장소</th><th>시간</th><th>행사명</th><th>상태</th></tr></thead><tbody>"
                     for _, r in b_df.iterrows():
                         html += f"<tr><td>{r['place']}</td><td>{r['time']}</td><td>{r['event']}</td><td>{r['status']}</td></tr>"
                     st.markdown(html + "</tbody></table>", unsafe_allow_html=True)
                 else:
-                    st.write("내역 없음")
+                    st.info(f"'{b}'의 대관 내역이 없습니다.")
+    else:
+        st.warning("선택하신 기간에 데이터가 없습니다.")
 else:
     st.info("왼쪽 사이드바에서 건물을 선택해 주세요.")
