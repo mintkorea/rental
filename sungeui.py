@@ -9,7 +9,9 @@ from fpdf import FPDF
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
+
+# 요청하신 건물 리스트 추가 및 순서 조정
+BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 # 2. CSS 설정 (디자인 유지)
 st.markdown("""
@@ -37,9 +39,6 @@ def get_data(s_date, e_date):
         for item in raw:
             if not item.get('startDt'): continue
             
-            # allowDay 처리: "1,2,3" 형태를 리스트로 변환 (1:월, 7:일 기준인 경우 많음)
-            # 시스템마다 기준이 다를 수 있으나 보통 파이썬 weekday()는 0:월 ~ 6:일임
-            # 여기서는 API의 allowDay 값을 숫자로 변환하여 비교합니다.
             allowed_weekdays = []
             if item.get('allowDay'):
                 allowed_weekdays = [int(d.strip()) for d in str(item['allowDay']).split(',') if d.strip()]
@@ -50,10 +49,8 @@ def get_data(s_date, e_date):
             curr = s_dt
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
-                    # 요일 체크 (파이썬 weekday() 0=월, 1=화... 이므로 API 기준인 1=월에 맞춤)
                     curr_weekday = curr.weekday() + 1 
                     
-                    # allowDay가 비어있으면 매일, 있으면 해당 요일만 포함
                     if not allowed_weekdays or curr_weekday in allowed_weekdays:
                         rows.append({
                             '날짜': curr.strftime('%m-%d'),
@@ -75,7 +72,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. 건물별 PDF 생성 함수 (요일 반영된 DF 사용)
+# 4. 건물별 PDF 생성 함수
 def create_split_pdf(df, title_text, selected_buildings):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_font("Nanum", "", "NanumGothic.ttf", uni=True)
@@ -116,12 +113,13 @@ def create_split_pdf(df, title_text, selected_buildings):
 st.sidebar.title("📅 대관 조회 설정")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=now_today)
-selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
+
+# 디폴트 선택을 성의회관, 의생명산업연구원으로 수정
+selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
 all_df = get_data(start_selected, end_selected)
 display_title = f"성의교정 대관 현황 ({start_selected} ~ {end_selected})" if start_selected != end_selected else f"성의교정 대관 현황 ({start_selected})"
 
-# 🚀 PDF 즉시 다운로드 (AttributeError 해결 방식)
 if not all_df.empty:
     try:
         pdf_data = create_split_pdf(all_df, display_title, selected_bu)
