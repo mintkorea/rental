@@ -3,16 +3,13 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-from fpdf import FPDF
-import os
 
-# 1. 페이지 및 기본 설정
+# 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
-DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
 # 2. CSS 설정
 st.markdown("""
@@ -25,7 +22,7 @@ st.markdown("""
     table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 8px 4px; font-size: 13px; font-weight: bold; text-align: center; }
     td { border: 1px solid #eee; padding: 8px 6px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
-    .no-data-msg { padding: 15px; color: #FF4B4B; font-size: 14px; font-weight: bold; background-color: #fff5f5; border: 1px solid #ffe3e3; border-radius: 5px; margin-bottom: 20px; }
+    .no-data-msg { padding: 12px; color: #d9534f; font-size: 13px; background-color: #f9f9f9; border: 1px solid #eee; border-radius: 5px; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -40,60 +37,57 @@ def get_data(s_date, e_date):
         rows = []
         for item in raw:
             if not item.get('startDt'): continue
-            allowed_weekdays = [int(d.strip()) for d in str(item.get('allowDay', '')).split(',') if d.strip()]
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             curr = s_dt
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
-                    if not allowed_weekdays or (curr.weekday() + 1) in allowed_weekdays:
-                        rows.append({
-                            '요일': ['월','화','수','목','금','토','일'][curr.weekday()],
-                            'full_date': curr.strftime('%Y-%m-%d'),
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', ''), 
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', ''), 
-                            '인원': item.get('peopleCount', ''),
-                            '부서': item.get('mgDeptNm', ''),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
+                    rows.append({
+                        '요일': ['월','화','수','목','금','토','일'][curr.weekday()],
+                        'full_date': curr.strftime('%Y-%m-%d'),
+                        '건물명': str(item.get('buNm', '')).strip(),
+                        '장소': item.get('placeNm', ''), 
+                        '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
+                        '행사명': item.get('eventNm', ''), 
+                        '인원': item.get('peopleCount', ''),
+                        '부서': item.get('mgDeptNm', ''),
+                        '상태': '확정' if item.get('status') == 'Y' else '대기'
+                    })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 5. 메인 UI
+# 4. 사이드바 설정
 st.sidebar.title("📅 대관 조회 설정")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=start_selected)
-selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
+selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
+# 데이터 가져오기
 all_df = get_data(start_selected, end_selected)
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-# --- 수정된 핵심 루프 부분 ---
-# 1. 날짜별로 먼저 나눕니다.
+# 5. 메인 출력 로직
 date_range = pd.date_range(start_selected, end_selected).strftime('%Y-%m-%d')
 
 for date_str in date_range:
-    # 해당 날짜 데이터 필터링
-    day_df = all_df[all_df['full_date'] == date_str] if not all_df.empty else pd.DataFrame()
-    
-    # 요일 표시
+    # 날짜 헤더 표시
     d_obj = datetime.strptime(date_str, '%Y-%m-%d')
     w_str = ['월','화','수','목','금','토','일'][d_obj.weekday()]
     st.markdown(f'<div class="date-header">📅 {date_str} ({w_str}요일)</div>', unsafe_allow_html=True)
     
-    # 2. 선택된 건물 리스트를 하나씩 무조건 화면에 뿌립니다.
+    # 해당 날짜 데이터만 미리 추출
+    day_df = all_df[all_df['full_date'] == date_str] if not all_df.empty else pd.DataFrame()
+    
     for bu in selected_bu:
         st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
         
-        # 해당 건물에 내역이 있는지 확인
+        # 필터링: 건물명 일치 확인
         bu_df = day_df[day_df['건물명'] == bu] if not day_df.empty else pd.DataFrame()
         
         if not bu_df.empty:
-            # 내역이 있으면 테이블 출력
+            # 데이터가 있으면 테이블 출력
             header_html = """<div class="table-container"><table><thead><tr>
                             <th style="width:15%;">장소</th><th style="width:15%;">시간</th>
                             <th style="width:40%;">행사명</th><th style="width:7%;">인원</th>
@@ -102,5 +96,5 @@ for date_str in date_range:
             rows_html = "".join([f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
             st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
         else:
-            # 내역이 없으면 건물 이름 바로 아래에 문구 출력
+            # 데이터가 없으면 문구 출력
             st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
