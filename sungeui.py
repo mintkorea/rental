@@ -15,7 +15,7 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (셸 너비 수치 반영 및 레이아웃 유지)
+# 2. CSS 설정 (원본 그대로 유지)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -131,38 +131,46 @@ if not all_df.empty:
 
 st.markdown(f'<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
+# --- [수정된 부분 시작] ---
 if not all_df.empty:
-    for date in sorted(all_df['full_date'].unique()):
-        day_df = all_df[all_df['full_date'] == date]
-        st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
-        
-        for bu in selected_bu:
-            bu_df = day_df[day_df['건물명'] == bu]
-            if not bu_df.empty:
-                st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
-                
-                # 셸 너비 비율 적용 (장소:15%, 시간:15%, 행사명:40%, 인원:7%, 부서:15%, 상태:8%)
-                header_html = """
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="width:15%;">장소</th>
-                                <th style="width:15%;">시간</th>
-                                <th style="width:40%;">행사명</th>
-                                <th style="width:7%;">인원</th>
-                                <th style="width:15%;">부서</th>
-                                <th style="width:8%;">상태</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                """
-                rows_html = "".join([
-                    f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" 
-                    for _, r in bu_df.iterrows()
-                ])
-                footer_html = "</tbody></table></div>"
-                
-                st.markdown(header_html + rows_html + footer_html, unsafe_allow_html=True)
+    # 필터링된 건물의 데이터가 있는지 확인
+    filtered_df = all_df[all_df['건물명'].isin(selected_bu)]
+    
+    if filtered_df.empty:
+        # 건물 필터링 결과가 없을 때
+        st.info("대관 내역이 없습니다.")
+    else:
+        for date in sorted(filtered_df['full_date'].unique()):
+            day_df = filtered_df[filtered_df['full_date'] == date]
+            st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
+            
+            for bu in selected_bu:
+                bu_df = day_df[day_df['건물명'] == bu]
+                if not bu_df.empty:
+                    st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
+                    
+                    header_html = """
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:15%;">장소</th>
+                                    <th style="width:15%;">시간</th>
+                                    <th style="width:40%;">행사명</th>
+                                    <th style="width:7%;">인원</th>
+                                    <th style="width:15%;">부서</th>
+                                    <th style="width:8%;">상태</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    """
+                    rows_html = "".join([
+                        f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" 
+                        for _, r in bu_df.iterrows()
+                    ])
+                    footer_html = "</tbody></table></div>"
+                    st.markdown(header_html + rows_html + footer_html, unsafe_allow_html=True)
 else:
-    st.info("조회된 내역이 없습니다.")
+    # 조회된 데이터 자체가 없을 때
+    st.info("대관 내역이 없습니다.")
+# --- [수정된 부분 끝] ---
