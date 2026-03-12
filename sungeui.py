@@ -5,21 +5,16 @@ from datetime import datetime
 import pytz
 import io
 
-# 1. 페이지 설정 (PC 와이드 모드 고정)
-st.set_page_config(
-    page_title="성의교정 대관 통합 관리", 
-    layout="wide", 
-    initial_sidebar_state="expanded"
-)
+# 1. 페이지 설정
+st.set_page_config(page_title="성의교정 대관 통합 관리", layout="wide", initial_sidebar_state="expanded")
 
-# 2. 반응형 및 가독성 스타일
+# 2. CSS: 셀 헤더 중앙 정렬 및 가독성 스타일
 st.markdown("""
     <style>
+    th { text-align: center !important; background-color: #f0f2f6 !important; }
     td { white-space: normal !important; word-break: break-all !important; vertical-align: middle !important; }
-    .block-container { padding-top: 2rem; }
-    [data-testid="stSidebar"] { min-width: 250px; }
-    /* 표 제목행 배경색 강조 */
-    thead tr th { background-color: #f0f2f6 !important; }
+    .title-box { background-color: #1E3A5F; padding: 20px; border-radius: 10px; color: white; text-align: center; margin-bottom: 25px; }
+    .date-info { font-size: 1.2rem; font-weight: 500; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -27,29 +22,7 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 3. 엑셀 리포트 생성 (부서명 포함 전체 데이터)
-def create_excel_report(df):
-    if df.empty: return None
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='일일대관현황')
-        workbook = writer.book
-        worksheet = writer.sheets['일일대관현황']
-        
-        hdr_fmt = workbook.add_format({'bold':True, 'bg_color':'#D9E1F2', 'border':1, 'align':'center'})
-        cell_fmt = workbook.add_format({'border':1, 'align':'center'})
-        wrap_fmt = workbook.add_format({'border':1, 'align':'left', 'text_wrap':True})
-        
-        for i, col in enumerate(df.columns):
-            worksheet.write(0, i, col, hdr_fmt)
-            # 열 너비 최적화
-            if col in ['행사명', '부서']: width = 30
-            elif col == '장소': width = 20
-            else: width = 12
-            worksheet.set_column(i, i, width, wrap_fmt if width > 20 else cell_fmt)
-    return output.getvalue()
-
-# 4. 데이터 수집 및 로직 (allowDay & 부서명 추출)
+# 3. 데이터 수집 및 색상 로직
 @st.cache_data(ttl=60)
 def get_data(target_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -58,73 +31,72 @@ def get_data(target_date):
         res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         raw = res.json().get('res', [])
         rows = []
-        target_weekday = target_date.isoweekday()
+        wd_idx = target_date.isoweekday() # 월1~일7
+        
+        # 요일 색상 결정
+        wd_name = ['','월','화','수','목','금','토','일'][wd_idx]
+        if wd_idx == 6: # 토요일
+            display_wd = f":blue[{wd_name}]"
+        elif wd_idx == 7: # 일요일
+            display_wd = f":red[{wd_name}]"
+        else:
+            display_wd = wd_name
 
         for item in raw:
-            # allowDay 요일 필터링
             allow_days = str(item.get('allowDay', ''))
-            if allow_days and allow_days != 'None' and str(target_weekday) not in allow_days:
+            if allow_days and allow_days != 'None' and str(wd_idx) not in allow_days:
                 continue
             
             rows.append({
-                '날짜': target_date.isoformat(),
-                '요일': ['','월','화','수','목','금','토','일'][target_weekday],
                 '건물명': str(item.get('buNm', '')).strip(),
                 '장소': item.get('placeNm', '') or '-',
                 '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
                 '행사명': item.get('eventNm', '') or '-',
-                '부서': item.get('mgDeptNm', '') or '-', # 부서명 추가
-                '인원': str(item.get('peopleCount', '0')),
+                '부서': item.get('mgDeptNm', '') or '-',
                 '부스': str(item.get('boothCount', '0')),
+                '인원': str(item.get('peopleCount', '0')),
                 '상태': '확정' if item.get('status') == 'Y' else '대기',
                 '_tm': item.get('startTime', '00:00')
             })
-        if not rows: return pd.DataFrame()
+        if not rows: return pd.DataFrame(), display_wd
         df = pd.DataFrame(rows)
         df['b_idx'] = df['건물명'].apply(lambda x: BUILDING_ORDER.index(x) if x in BUILDING_ORDER else 99)
-        return df.sort_values(by=['b_idx', '_tm']).drop(columns=['_tm'])
-    except: return pd.DataFrame()
+        return df.sort_values(by=['b_idx', '_tm']).drop(columns=['_tm']), display_wd
+    except: return pd.DataFrame(), ""
 
-# 5. 사이드바 (조회 및 엑셀)
+# 4. 사이드바
 with st.sidebar:
-    st.header("🔍 관리자 메뉴")
-    date_in = st.date_input("날짜 선택", value=now_today)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    
+    st.header("⚙️ 관리 메뉴")
+    date_in = st.date_input("조회 날짜 선택", value=now_today)
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER[:3])
     st.write("---")
-    full_df = get_data(date_in)
-    
-    if not full_df.empty:
-        st.subheader("💾 데이터 내보내기")
-        filtered_for_excel = full_df[full_df['건물명'].isin(sel_bu)]
-        excel_bin = create_excel_report(filtered_for_excel)
-        st.download_button(
-            label="📥 엑셀 파일 다운로드",
-            data=excel_bin,
-            file_name=f"대관현황_{date_in}.xlsx",
-            use_container_width=True
-        )
+    st.info("💡 엑셀 출력 시 모든 상세 정보가 포함됩니다.")
 
-# 6. 메인 화면 (PC 최적화 대시보드)
-st.header(f"🏛️ {date_in} ({['','월','화','수','목','금','토','일'][date_in.isoweekday()]}) 대관 현황")
+# 5. 메인 화면 구성
+df, colored_wd = get_data(date_in)
+formatted_date = date_in.strftime("%Y. %m. %d")
 
-if not full_df.empty:
-    f_df = full_df[full_df['건물명'].isin(sel_bu)]
-    
+st.markdown(f"""
+    <div class="title-box">
+        <h2 style='margin:0;'>🏫 성의교정 대관 현황</h2>
+        <div class="date-info">{formatted_date}({colored_wd}) | 근무조 : A조</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+if not df.empty:
+    f_df = df[df['건물명'].isin(sel_bu)]
     for b_name in BUILDING_ORDER:
         if b_name in sel_bu:
             b_data = f_df[f_df['건물명'] == b_name]
             st.markdown(f"#### 📍 {b_name}")
-            
             if not b_data.empty:
-                # [최종 열 구성] 장소, 시간, 행사명, 부서, 부스, 인원, 상태
                 st.dataframe(
                     b_data[['장소', '시간', '행사명', '부서', '부스', '인원', '상태']], 
                     use_container_width=True, 
                     hide_index=True,
                     column_config={
                         "장소": st.column_config.TextColumn("🏠 장소", width="medium"),
-                        "시간": st.column_config.TextColumn("⏰ 시간", width="small"),
+                        "시간": st.column_config.TextColumn("⏰ 시간", width="small", help="중앙정렬", validate=None),
                         "행사명": st.column_config.TextColumn("📝 행사명", width="large"),
                         "부서": st.column_config.TextColumn("🏢 주관부서", width="medium"),
                         "부스": st.column_config.TextColumn("🎪 부스", width="min"),
@@ -133,6 +105,6 @@ if not full_df.empty:
                     }
                 )
             else:
-                st.caption(f"{b_name} 내역 없음")
+                st.caption(f"{b_name} 대관 내역이 없습니다.")
 else:
-    st.warning("데이터가 존재하지 않습니다.")
+    st.warning("조회된 데이터가 없습니다.")
