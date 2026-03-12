@@ -162,3 +162,4 @@ if not raw_df.empty:
         st.info("선택한 건물에 해당하는 내역이 없습니다.")
 else:
     st.info("조회된 내역이 없습니다.")
+
