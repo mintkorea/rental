@@ -9,8 +9,6 @@ from fpdf import FPDF
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
-
-# 건물 리스트 (요청하신 리스트 유지)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 # 2. CSS 설정 (디자인 유지)
@@ -26,7 +24,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 요일 필터링 함수 (원본 로직 유지)
+# 3. 데이터 로드 로직 (요일 필터 유지)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -37,9 +35,7 @@ def get_data(s_date, e_date):
         rows = []
         for item in raw:
             if not item.get('startDt'): continue
-            allowed_weekdays = []
-            if item.get('allowDay'):
-                allowed_weekdays = [int(d.strip()) for d in str(item['allowDay']).split(',') if d.strip()]
+            allowed_weekdays = [int(d.strip()) for d in str(item.get('allowDay', '')).split(',') if d.strip()]
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             curr = s_dt
@@ -67,11 +63,13 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. 건물별/날짜별 PDF 생성 함수 (요청 사항 반영)
+# 4. 핵심 수정: 날짜별로 표를 분리하는 PDF 생성 함수
 def create_split_pdf(df, title_text, selected_buildings):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_font("Nanum", "", "NanumGothic.ttf", uni=True)
     pdf.add_page()
+    
+    # 전체 타이틀
     pdf.set_font("Nanum", size=16)
     pdf.cell(0, 15, title_text, ln=True, align='C')
     pdf.ln(5)
@@ -79,30 +77,34 @@ def create_split_pdf(df, title_text, selected_buildings):
     for bu in selected_buildings:
         bu_df = df[df['건물명'] == bu]
         
-        # 건물 섹션 시작
-        pdf.set_font("Nanum", size=12, style='')
-        pdf.set_text_color(0, 0, 0)
+        # 건물 대제목
+        pdf.set_font("Nanum", size=13)
+        pdf.set_text_color(46, 80, 119) # 진한 파란색 계열
         pdf.cell(0, 10, f"■ {bu}", ln=True, align='L')
+        pdf.set_text_color(0, 0, 0) # 색상 복구
         
         if not bu_df.empty:
-            # 날짜별로 그룹화하여 표 생성
-            for date_val, date_df in bu_df.groupby('full_date'):
-                # 부제목: 날짜 + 대관 현황 (예: 2026-03-12 대관 현황)
-                pdf.set_font("Nanum", size=10)
-                pdf.set_text_color(50, 50, 50)
-                pdf.cell(0, 8, f"   ▶ {date_val} 대관 현황", ln=True, align='L')
+            # 날짜순으로 정렬하여 날짜별 그룹화 출력
+            unique_dates = sorted(bu_df['full_date'].unique())
+            for d_str in unique_dates:
+                day_df = bu_df[bu_df['full_date'] == d_str]
+                weekday_str = day_df.iloc[0]['요일']
+                
+                # 요청하신 부제목: "날짜(요일) 대관 현황"
+                pdf.set_font("Nanum", size=11)
+                pdf.cell(0, 10, f"  ▶ {d_str}({weekday_str}) 대관 현황", ln=True, align='L')
                 
                 # 표 헤더
                 cols = [("장소", 40), ("시간", 35), ("행사명", 115), ("인원", 12), ("부서", 50), ("상태", 15)]
-                pdf.set_fill_color(240, 240, 240)
-                pdf.set_text_color(0, 0, 0)
+                pdf.set_fill_color(245, 245, 245)
+                pdf.set_font("Nanum", size=10)
                 for txt, width in cols:
                     pdf.cell(width, 8, txt, border=1, align='C', fill=True)
                 pdf.ln()
 
                 # 표 내용
                 pdf.set_font("Nanum", size=9)
-                for _, row in date_df.iterrows():
+                for _, row in day_df.iterrows():
                     pdf.cell(40, 8, str(row['장소']), border=1, align='C')
                     pdf.cell(35, 8, str(row['시간']), border=1, align='C')
                     pdf.cell(115, 8, " " + str(row['행사명']), border=1, align='L')
@@ -110,13 +112,12 @@ def create_split_pdf(df, title_text, selected_buildings):
                     pdf.cell(50, 8, str(row['부서']), border=1, align='C')
                     pdf.cell(15, 8, str(row['상태']), border=1, align='C')
                     pdf.ln()
-                pdf.ln(4) # 날짜별 표 사이 간격
+                pdf.ln(5) # 날짜별 표 사이 간격
         else:
             pdf.set_font("Nanum", size=9)
-            pdf.cell(267, 8, "대관 내역이 없습니다.", border=1, align='C')
+            pdf.cell(267, 8, "  대관 내역이 없습니다.", border=1, align='L')
             pdf.ln()
-        
-        pdf.ln(6) # 건물 섹션 간 간격
+        pdf.ln(5) # 건물 섹션 간 간격
         
     return bytes(pdf.output())
 
