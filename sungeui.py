@@ -9,7 +9,7 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 모든 표의 너비와 폰트를 강제 고정
+# 2. CSS 설정: 픽셀(px) 단위로 절대 너비 강제 고정
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -18,17 +18,20 @@ st.markdown("""
     .building-header { font-size: 16px !important; font-weight: 700; margin-top: 15px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; }
     
     .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed !important; min-width: 600px; border: 1px solid #dee2e6; }
-    th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 8px 2px; font-size: 12px; font-weight: bold; text-align: center; }
-    td { border: 1px solid #eee; padding: 8px 4px; font-size: 12px; text-align: center; vertical-align: middle; word-break: break-all; }
+    
+    /* table-layout: fixed와 너비 px 고정이 핵심입니다 */
+    table { border-collapse: collapse; table-layout: fixed !important; width: 800px !important; border: 1px solid #dee2e6; }
+    th, td { border: 1px solid #dee2e6; padding: 10px 4px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
+    th { background-color: #f8f9fa; font-weight: bold; }
 
+    /* 모바일 폰트 크기만 조정 */
     @media only screen and (max-width: 768px) {
-        th, td { font-size: 11px !important; padding: 6px 2px !important; }
+        th, td { font-size: 12px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 함수 (기존 로직)
+# 3. 데이터 로드 함수 (기존 유지)
 @st.cache_data(ttl=60)
 def get_data(target_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -40,7 +43,6 @@ def get_data(target_date):
         for item in raw:
             rows.append({
                 '요일': ['월','화','수','목','금','토','일'][target_date.weekday()],
-                'full_date': target_date.strftime('%Y-%m-%d'),
                 '건물명': str(item.get('buNm', '')).strip(),
                 '장소': item.get('placeNm', ''), 
                 '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
@@ -52,7 +54,7 @@ def get_data(target_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 메인 출력 로직
+# 4. 메인 UI
 st.sidebar.title("📅 설정")
 date_input = st.sidebar.date_input("조회 날짜", value=now_today)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
@@ -70,25 +72,32 @@ if not df.empty:
         if not bu_df.empty:
             st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
             
-            # HTML 코드를 깔끔하게 한 번에 렌더링 (셸 너비 고정)
+            # 모든 표에 동일한 px 너비를 강제로 박아넣습니다.
             table_html = f"""
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 15%;">장소</th>
-                            <th style="width: 15%;">시간</th>
-                            <th style="width: 38%;">행사명</th>
-                            <th style="width: 8%;">인원</th>
-                            <th style="width: 16%;">부서</th>
-                            <th style="width: 8%;">상태</th>
+                            <th style="width: 100px;">장소</th>
+                            <th style="width: 120px;">시간</th>
+                            <th style="width: 310px;">행사명</th>
+                            <th style="width: 60px;">인원</th>
+                            <th style="width: 130px;">부서</th>
+                            <th style="width: 80px;">상태</th>
                         </tr>
                     </thead>
                     <tbody>
             """
             for _, r in bu_df.iterrows():
-                table_html += f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>"
-            
+                table_html += f"""
+                    <tr>
+                        <td>{r['장소']}</td>
+                        <td>{r['시간']}</td>
+                        <td style="text-align: left;">{r['행사명']}</td>
+                        <td>{r['인원']}</td>
+                        <td>{r['부서']}</td>
+                        <td>{r['상태']}</td>
+                    </tr>"""
             table_html += "</tbody></table></div>"
             st.markdown(table_html, unsafe_allow_html=True)
 else:
