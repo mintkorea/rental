@@ -11,10 +11,11 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
+# 건물 순서 설정
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. 반응형 CSS 설정 (모바일 인식 폰트 리사이징 및 셸 조정)
+# 2. 반응형 CSS 설정 (모바일 인식 및 폰트 리사이징)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -22,35 +23,25 @@ st.markdown("""
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 10px 0; margin-top: 25px; border-bottom: 2px solid #eee; }
     .building-header { font-size: 16px !important; font-weight: 700; margin-top: 15px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; }
     
+    /* 테이블 컨테이너: 모바일 가로 스크롤 허용 */
     .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 650px; } /* 모바일 가로 스크롤 보장 */
     
+    /* 기본 테이블 스타일 */
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 600px; border: 1px solid #dee2e6; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px 4px; font-size: 13px; font-weight: bold; text-align: center; }
     td { border: 1px solid #eee; padding: 10px 6px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
 
-    /* [셸 너비 고정] 전체 합 100% */
-    .w-place { width: 15%; }
-    .w-time { width: 15%; }
-    .w-event { width: 38%; }
-    .w-people { width: 8%; }
-    .w-dept { width: 16%; }
-    .w-status { width: 8%; }
-
-    /* [모바일 전용 스타일] 화면 너비가 768px 이하일 때 자동 적용 */
+    /* 모바일 전용 (768px 이하) 폰트 축소 */
     @media only screen and (max-width: 768px) {
-        .main-title { font-size: 18px !important; }
-        .date-header { font-size: 16px !important; }
-        .building-header { font-size: 14px !important; }
         th { font-size: 11px !important; padding: 6px 2px !important; }
         td { font-size: 11px !important; padding: 6px 3px !important; }
-        
-        /* 모바일에서는 표가 너무 좁아지지 않게 최소 너비 유지 */
-        table { min-width: 600px !important; }
+        .date-header { font-size: 16px !important; }
+        .building-header { font-size: 14px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 처리 함수 (기존 로직 유지)
+# 3. 데이터 로드 및 처리 함수
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -90,7 +81,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. PDF 생성 함수 (기존 유지)
+# 4. PDF 생성 함수 (기존 로직 유지)
 def create_split_pdf(df, selected_buildings):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -106,25 +97,22 @@ def create_split_pdf(df, selected_buildings):
             bu_df = date_df[date_df['건물명'] == bu]
             if bu_df.empty: continue
             pdf.set_font("Nanum", size=11)
-            pdf.set_text_color(46, 80, 119)
             pdf.cell(0, 10, f"■ {bu}", ln=True, align='L')
-            pdf.set_text_color(0, 0, 0)
-            cols = [("장소", 38), ("시간", 35), ("행사명", 115), ("인원", 12), ("부서", 52), ("상태", 15)]
+            cols = [("장소", 40), ("시간", 35), ("행사명", 115), ("인원", 12), ("부서", 50), ("상태", 15)]
             pdf.set_font("Nanum", size=9)
-            for txt, width in cols: pdf.cell(width, 9, txt, border=1, align='C', fill=False)
+            for txt, width in cols: pdf.cell(width, 9, txt, border=1, align='C')
             pdf.ln()
             for _, row in bu_df.iterrows():
-                pdf.cell(38, 8, str(row['장소'])[:20], border=1, align='C')
+                pdf.cell(40, 8, str(row['장소'])[:20], border=1, align='C')
                 pdf.cell(35, 8, str(row['시간']), border=1, align='C')
                 pdf.cell(115, 8, " " + str(row['행사명'])[:50], border=1, align='L')
                 pdf.cell(12, 8, str(row['인원']), border=1, align='C')
-                pdf.cell(52, 8, str(row['부서'])[:20], border=1, align='C')
+                pdf.cell(50, 8, str(row['부서'])[:20], border=1, align='C')
                 pdf.cell(15, 8, str(row['상태']), border=1, align='C')
                 pdf.ln()
-            pdf.ln(2)
     return bytes(pdf.output())
 
-# 5. 메인 출력 로직
+# 5. 메인 UI 및 출력 (HTML 노출 방지 핵심 로직)
 st.sidebar.title("📅 대관 조회")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=start_selected)
@@ -136,7 +124,7 @@ if not all_df.empty:
     with st.sidebar:
         try:
             pdf_data = create_split_pdf(all_df, selected_bu)
-            st.download_button(label="📥 PDF 저장 (날짜별 분리)", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
+            st.download_button(label="📥 PDF 저장", data=pdf_data, file_name=f"rental.pdf", mime="application/pdf")
         except: pass
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
@@ -145,23 +133,24 @@ if not all_df.empty:
     for date in sorted(all_df['full_date'].unique()):
         day_df = all_df[all_df['full_date'] == date]
         st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
+        
         for bu in selected_bu:
             bu_df = day_df[day_df['건물명'] == bu]
             if not bu_df.empty:
                 st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
                 
-                # 반응형 셸 넓이가 적용된 테이블 생성
+                # 셸 간격 최적화 수치 대치 (장소15, 시간15, 행사명40, 인원7, 부서15, 상태8)
                 table_html = f"""
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th class="w-place">장소</th>
-                                <th class="w-time">시간</th>
-                                <th class="w-event">행사명</th>
-                                <th class="w-people">인원</th>
-                                <th class="w-dept">부서</th>
-                                <th class="w-status">상태</th>
+                                <th style="width:15%;">장소</th>
+                                <th style="width:15%;">시간</th>
+                                <th style="width:40%;">행사명</th>
+                                <th style="width:7%;">인원</th>
+                                <th style="width:15%;">부서</th>
+                                <th style="width:8%;">상태</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -178,6 +167,8 @@ if not all_df.empty:
                             </tr>
                     """
                 table_html += "</tbody></table></div>"
+                
+                # HTML 렌더링 (옵션 누락 주의)
                 st.markdown(table_html, unsafe_allow_html=True)
 else:
     st.info("조회된 내역이 없습니다.")
