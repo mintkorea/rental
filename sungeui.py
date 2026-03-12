@@ -146,3 +146,4 @@ if not df.empty:
         st.markdown('<div class="no-data">선택한 건물에 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
     st.markdown('<div class="no-data">조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+
