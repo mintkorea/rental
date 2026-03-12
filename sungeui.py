@@ -6,16 +6,21 @@ import pytz
 from fpdf import FPDF
 import os
 
-# 1. 기본 설정
+# 1. 기본 설정 및 한국 시간 고정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
+# 건물 순서 (스크린샷 기반 업데이트 반영)
+BUILDING_ORDER = [
+    "성의회관", "의생명산업연구원", "옴니버스 파크", 
+    "옴니버스파크 의과대학", "옴니버스파크 간호대학", 
+    "대학본관", "서울성모별관"
+]
 
-# 2. 데이터 가져오기 (요일 필터링 로직 추가)
+# 2. 데이터 처리 및 요일 필터링 로직
 @st.cache_data(ttl=60)
-def get_data(s_date, e_date):
+def get_filtered_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": s_date.isoformat(), "end": e_date.isoformat()}
     try:
@@ -25,20 +30,20 @@ def get_data(s_date, e_date):
         for item in raw:
             if not item.get('startDt'): continue
             
-            # allowDay 처리 (예: "1,2,3" -> [1, 2, 3])
-            allow_day_raw = str(item.get('allowDay', ''))
-            allowed_weekdays = [int(d.strip()) for d in allow_day_raw.split(',') if d.strip()]
+            # allowDay 추출 (예: "1,2,3" -> [1, 2, 3])
+            allow_day_str = str(item.get('allowDay', ''))
+            allowed_list = [int(x.strip()) for x in allow_day_str.split(',') if x.strip()]
             
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
             curr = s_dt
             while curr <= e_dt:
-                # 사용자가 선택한 조회 기간 내에 있고
+                # 1) 조회 기간 범위 내에 있는가?
                 if s_date <= curr <= e_date:
-                    # 해당 날짜의 요일(월=1, ..., 일=7)이 allowDay에 포함되어 있는지 확인
+                    # 2) 요일 조건이 맞는가? (월:1 ~ 일:7)
                     curr_weekday = curr.weekday() + 1
-                    if not allowed_weekdays or curr_weekday in allowed_weekdays:
+                    if not allowed_list or curr_weekday in allowed_list:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
                             '요일': ['월','화','수','목','금','토','일'][curr.weekday()],
@@ -51,6 +56,7 @@ def get_data(s_date, e_date):
                             '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
+        
         df = pd.DataFrame(rows)
         if not df.empty:
             df['건물명'] = pd.Categorical(df['건물명'], categories=BUILDING_ORDER, ordered=True)
@@ -58,7 +64,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 3. PDF 생성 (날짜별 페이지 분리 보장)
+# 3. PDF 생성 (날짜별 페이지 강제 분리)
 def create_paged_pdf(df, selected_buildings):
     font_path = os.path.join(os.getcwd(), "NanumGothic.ttf")
     if not os.path.exists(font_path): return None
@@ -69,6 +75,7 @@ def create_paged_pdf(df, selected_buildings):
     df_filtered = df[df['건물명'].isin(selected_buildings)]
     if df_filtered.empty: return None
 
+    # 날짜별 루프 - 무조건 새 페이지에서 시작
     for date_val in sorted(df_filtered['full_date'].unique()):
         pdf.add_page()
         date_df = df_filtered[df_filtered['full_date'] == date_val]
@@ -87,7 +94,8 @@ def create_paged_pdf(df, selected_buildings):
             pdf.set_text_color(0, 0, 0)
 
             pdf.set_font("Nanum", size=9)
-            pdf.set_fill_color(240, 240, 240)
+            pdf.set_fill_color(242, 242, 242)
+            # 가독성을 위해 너비 미세 조정 (장소/행사명)
             cols = [("장소", 40), ("시간", 35), ("행사명", 110), ("인원", 10), ("부서", 50), ("상태", 15)]
             for txt, width in cols:
                 pdf.cell(width, 8, txt, border=1, align='C', fill=True)
@@ -105,31 +113,39 @@ def create_paged_pdf(df, selected_buildings):
 
     return pdf.output()
 
-# 4. 메인 화면
-st.sidebar.header("📅 조회 설정")
+# 4. 메인 UI (모바일 대응)
+st.sidebar.header("📅 조회 범위 설정")
 s_d = st.sidebar.date_input("시작일", value=now_today)
 e_d = st.sidebar.date_input("종료일", value=now_today)
-selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
-data = get_data(s_d, e_d)
+data = get_filtered_data(s_d, e_d)
 
+# PDF 다운로드 버튼 섹션
 if not data.empty:
     try:
         pdf_res = create_paged_pdf(data, selected_bu)
         if pdf_res:
-            st.sidebar.download_button(label="📥 날짜별 PDF 저장", data=bytes(pdf_res), file_name=f"rental_{s_d}.pdf", mime="application/pdf")
+            st.sidebar.download_button(
+                label="📥 날짜별 PDF 저장", 
+                data=bytes(pdf_res), 
+                file_name=f"rental_{s_d}.pdf", 
+                mime="application/pdf"
+            )
     except Exception as e:
-        st.sidebar.error(f"PDF 에러: {e}")
+        st.sidebar.error(f"PDF 생성 오류: {e}")
 
-st.title("🏫 성의교정 대관 조회")
+# 화면 출력 섹션
+st.markdown(f"### 🏫 성의교정 대관 현황")
 if not data.empty:
     for date in sorted(data['full_date'].unique()):
         day_df = data[data['full_date'] == date]
-        st.subheader(f"📅 {date} ({day_df.iloc[0]['요일']})")
+        st.info(f"📅 {date} ({day_df.iloc[0]['요일']})")
         for bu in selected_bu:
             bu_df = day_df[day_df['건물명'] == bu]
             if not bu_df.empty:
                 st.write(f"**🏢 {bu}**")
+                # 모바일 가독성을 위해 데이터프레임 대신 테이블 사용
                 st.table(bu_df[['장소', '시간', '행사명', '부서', '상태']])
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.warning("조회된 대관 내역이 없습니다.")
