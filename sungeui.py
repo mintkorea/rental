@@ -9,39 +9,26 @@ st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 2. CSS 설정: 모든 표의 너비를 동일하게 강제 고정
+# 2. CSS 설정: 모든 표의 너비와 폰트를 강제 고정
 st.markdown("""
 <style>
-    .main-title { font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 20px; }
-    .date-header { font-size: 18px; font-weight: 800; color: #1E3A5F; margin-top: 30px; border-bottom: 2px solid #eee; }
-    .building-header { font-size: 15px; font-weight: 700; margin: 15px 0 5px 0; border-left: 5px solid #2E5077; padding-left: 10px; }
+    .stApp { background-color: white; }
+    .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 15px; }
+    .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 10px 0; margin-top: 25px; border-bottom: 2px solid #eee; }
+    .building-header { font-size: 16px !important; font-weight: 700; margin-top: 15px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; }
     
-    /* 테이블 레이아웃 강제 고정 */
-    .fixed-table {
-        width: 100% !important;
-        table-layout: fixed !important; /* 이 설정이 있어야 너비가 고정됩니다 */
-        border-collapse: collapse;
-        margin-bottom: 10px;
-    }
-    .fixed-table th, .fixed-table td {
-        border: 1px solid #dee2e6;
-        padding: 8px 4px;
-        text-align: center;
-        vertical-align: middle;
-        font-size: 12px;
-        word-break: break-all; /* 내용이 길면 줄바꿈 */
-        overflow: hidden;
-    }
-    .fixed-table th { background-color: #f8f9fa; font-weight: bold; }
+    .table-container { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed !important; min-width: 600px; border: 1px solid #dee2e6; }
+    th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 8px 2px; font-size: 12px; font-weight: bold; text-align: center; }
+    td { border: 1px solid #eee; padding: 8px 4px; font-size: 12px; text-align: center; vertical-align: middle; word-break: break-all; }
 
-    /* 모바일 대응: 화면이 작아지면 폰트 추가 축소 */
     @media only screen and (max-width: 768px) {
-        .fixed-table th, .fixed-table td { font-size: 11px !important; padding: 6px 2px !important; }
+        th, td { font-size: 11px !important; padding: 6px 2px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 함수 (기존 로직 동일)
+# 3. 데이터 로드 함수 (기존 로직)
 @st.cache_data(ttl=60)
 def get_data(target_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -65,11 +52,11 @@ def get_data(target_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 출력 로직
+# 4. 메인 출력 로직
 st.sidebar.title("📅 설정")
 date_input = st.sidebar.date_input("조회 날짜", value=now_today)
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관"]
-selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER[:3])
+BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
+selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER[:2])
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
@@ -83,33 +70,26 @@ if not df.empty:
         if not bu_df.empty:
             st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
             
-            # 각 컬럼의 너비를 %로 고정하여 모든 표를 동일하게 만듦
-            html_table = f"""
-            <table class="fixed-table">
-                <thead>
-                    <tr>
-                        <th style="width: 15%;">장소</th>
-                        <th style="width: 15%;">시간</th>
-                        <th style="width: 38%;">행사명</th>
-                        <th style="width: 8%;">인원</th>
-                        <th style="width: 16%;">부서</th>
-                        <th style="width: 8%;">상태</th>
-                    </tr>
-                </thead>
-                <tbody>
+            # HTML 코드를 깔끔하게 한 번에 렌더링 (셸 너비 고정)
+            table_html = f"""
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 15%;">장소</th>
+                            <th style="width: 15%;">시간</th>
+                            <th style="width: 38%;">행사명</th>
+                            <th style="width: 8%;">인원</th>
+                            <th style="width: 16%;">부서</th>
+                            <th style="width: 8%;">상태</th>
+                        </tr>
+                    </thead>
+                    <tbody>
             """
             for _, r in bu_df.iterrows():
-                html_table += f"""
-                    <tr>
-                        <td>{r['장소']}</td>
-                        <td>{r['시간']}</td>
-                        <td style="text-align: left; padding-left: 8px;">{r['행사명']}</td>
-                        <td>{r['인원']}</td>
-                        <td>{r['부서']}</td>
-                        <td>{r['상태']}</td>
-                    </tr>
-                """
-            html_table += "</tbody></table>"
-            st.write(html_table, unsafe_allow_html=True)
+                table_html += f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>"
+            
+            table_html += "</tbody></table></div>"
+            st.markdown(table_html, unsafe_allow_html=True)
 else:
     st.info("조회된 데이터가 없습니다.")
