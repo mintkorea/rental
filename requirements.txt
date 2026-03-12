@@ -1,5 +1,5 @@
 streamlit
-pandas
-reportlab
-fpdf2
 requests
+pandas
+fpdf
+xlsxwriter
