@@ -12,39 +12,38 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 ('시간' 셸 폭 극한 축소 및 여백 제로화)
+# 2. CSS 설정 (시간 여백 확보 및 자연스러운 줌/스크롤)
 st.markdown("""
 <style>
-    /* 전체 줌 및 스크롤 설정 */
-    html, body { min-width: 100%; overflow-x: auto; -webkit-text-size-adjust: none; }
+    /* 브라우저 기본 스크롤과 줌이 표 전체에 적용되도록 설정 */
+    html, body { min-width: 100%; overflow-x: visible !important; }
     
-    /* 타이틀 및 헤더 사이즈 최적화 */
-    .main-title { font-size: 13px !important; font-weight: 800; text-align: center; margin-bottom: 2px; }
-    .date-header { font-size: 10.5px !important; font-weight: bold; background-color: #f0f2f6; padding: 2px 4px; border-left: 3px solid #2e5077; margin-top: 6px; }
-    .bu-header { font-size: 10px !important; font-weight: bold; margin: 3px 0 1px 0; border-left: 2px solid #2e5077; padding-left: 4px; }
+    .main-title { font-size: 14px !important; font-weight: 800; text-align: center; margin-bottom: 5px; }
+    .date-header { font-size: 11px !important; font-weight: bold; background-color: #f0f2f6; padding: 3px 6px; border-left: 3px solid #2e5077; margin-top: 10px; }
+    .bu-header { font-size: 10px !important; font-weight: bold; margin: 5px 0 2px 0; border-left: 2px solid #2e5077; padding-left: 5px; }
     
-    /* 테이블 컨테이너: 가로 스크롤 제거 유도 */
-    .t-container { width: 100%; overflow-x: hidden; } /* 가로 스크롤 강제 제거 */
+    /* 테이블 컨테이너: 내부 스크롤을 끄고 전체가 같이 움직이게 함 */
+    .t-container { width: 100%; overflow: visible !important; margin-bottom: 15px; }
     
-    /* 테이블 스타일: 폰트 8.5px 및 여백 최소화 */
-    table { width: 100%; border-collapse: collapse; min-width: 380px; table-layout: fixed; }
-    th, td { border: 1px solid #dee2e6; padding: 1px 0.5px !important; font-size: 8.5px !important; line-height: 1.0; word-break: break-all; text-align: center; vertical-align: middle; }
-    th { background-color: #f8f9fa; font-weight: bold; height: 16px; }
+    /* 테이블 스타일: 가독성을 위한 최소한의 여백 확보 */
+    table { width: 100%; border-collapse: collapse; min-width: 450px; table-layout: fixed; border: 1px solid #dee2e6; }
+    th, td { border: 1px solid #dee2e6; padding: 2px 1px !important; font-size: 9px !important; line-height: 1.1; word-break: break-all; text-align: center; vertical-align: middle; }
+    th { background-color: #f8f9fa; font-weight: bold; height: 20px; }
     
-    /* [최종 최적화] '시간' 셸 극한 축소 및 부서/행사명 폭 조절 */
+    /* 셸 너비 재조정 (시간 셸 여백 확보) */
     .w-place { width: 15%; }    /* 장소 */
-    .w-time  { width: 7%; }     /* [핵심 수정] 시간 (요청하신 대로 '인원' 수준인 6~7%로 극한 축소) */
-    .w-event { width: 50%; }    /* 행사명 (시간/부서에서 줄인 폭을 여기에 집중 투자) */
-    .w-count { width: 6%; }     /* 인원 (6% 고정) */
-    .w-dept  { width: 16%; }    /* 부서 (내용 보존을 위해 남은 할당) */
-    .w-stat  { width: 6%; }     /* 상태 (6% 고정) */
+    .w-time  { width: 9.5%;    /* [수정] 시간을 9.5%로 늘려 여백 확보 */
+               letter-spacing: -0.5px; } /* 글자 간격을 좁혀 한 줄 유지 */
+    .w-event { width: 48%; }    /* 행사명 */
+    .w-count { width: 6.5%; }   /* 인원 */
+    .w-dept  { width: 15%; }    /* 부서 */
+    .w-stat  { width: 6%; }     /* 상태 */
     
-    /* 행사명 왼쪽 정렬 */
-    .left { text-align: left !important; padding-left: 2px !important; }
+    .left { text-align: left !important; padding-left: 3px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 정제 (동일 로직 유지)
+# 3. 데이터 로드 및 정제
 @st.cache_data(ttl=60)
 def get_clean_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -57,7 +56,7 @@ def get_clean_data(s_date, e_date):
             if not item.get('startDt'): continue
             def clean(t):
                 if not t: return ""
-                return str(t).replace("<", "&lt;").replace(">", "&gt;").replace("'", "&#39;").replace('"', "&quot;").replace("\n", " ").strip()
+                return str(t).replace("<", "&lt;").replace(">", "&gt;").replace("'", "&#39;").replace('"', "&quot;").strip()
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             curr = s_dt
@@ -78,14 +77,14 @@ def get_clean_data(s_date, e_date):
         return pd.DataFrame(rows).drop_duplicates()
     except: return pd.DataFrame()
 
-# 4. 사이드바 및 필터
+# 4. 사이드바 & 데이터 호출
 s_day = st.sidebar.date_input("시작", value=now_today)
 e_day = st.sidebar.date_input("종료", value=s_day)
 selected_bu = st.sidebar.multiselect("건물", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
 df = get_clean_data(s_day, e_day)
 
 # 5. 메인 출력
-st.markdown('<div class="main-title">🏫 대관 현황 (시간 압축 모드)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 if not df.empty:
     f_df = df[df['건물명'].isin(selected_bu)]
