@@ -7,24 +7,24 @@ import pytz
 # 1. 페이지 설정 (최상단 필수)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
-# 2. 줌(확대) 활성화를 위한 전역 CSS
-# 모바일에서 두 손가락 확대(Pinch Zoom)를 강제로 허용합니다.
+# 2. 줌(확대) 활성화를 위한 CSS
+# 모바일 브라우저의 기본 줌 기능을 강제로 깨우고 표가 깨지지 않게 합니다.
 st.markdown("""
 <style>
-    /* Streamlit 기본 레이아웃의 줌 차단 해제 */
+    /* 줌 차단 해제 */
     html, body, [data-testid="stAppViewContainer"] {
         touch-action: auto !important;
         user-scalable: yes !important;
     }
     
-    .main-title { font-size: 22px; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 20px; }
+    .main-title { font-size: 24px; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 20px; }
     .date-header { font-size: 18px; font-weight: 800; color: #1E3A5F; padding: 10px; background: #f0f2f6; border-left: 5px solid #2E5077; margin-top: 30px; }
     .bu-header { font-size: 16px; font-weight: 700; margin: 15px 0 8px 0; color: #333; }
 
-    /* 표 디자인: 확대했을 때 글자가 뭉치지 않도록 최소 너비 고정 */
+    /* 표 디자인: 가로로 길게 유지하여 확대 시 글자가 안 뭉치게 함 */
     .table-container { width: 100%; overflow-x: auto !important; }
-    table { width: 100%; border-collapse: collapse; min-width: 800px; table-layout: fixed; }
-    th, td { border: 1px solid #ddd !important; padding: 10px 4px; text-align: center; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; min-width: 850px; table-layout: fixed; }
+    th, td { border: 1px solid #ddd !important; padding: 12px 4px; text-align: center; font-size: 14px; }
     th { background-color: #f8f9fa; font-weight: bold; }
     
     /* 시간 열을 장소보다 좁게 설정 */
@@ -35,7 +35,7 @@ st.markdown("""
     .col-dept  { width: 110px; }
     .col-stat  { width: 55px; }
 
-    .text-left { text-align: left !important; padding-left: 10px !important; line-height: 1.4; }
+    .text-left { text-align: left !important; padding-left: 10px !important; line-height: 1.5; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -74,7 +74,7 @@ def get_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 필터 설정
+# 4. 사이드바 및 필터 로직 (정상 작동 보장)
 st.sidebar.title("📅 조회 필터")
 s_date = st.sidebar.date_input("시작일", now_today)
 e_date = st.sidebar.date_input("종료일", s_date)
@@ -82,11 +82,11 @@ selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, de
 
 raw_df = get_data(s_date, e_date)
 
-# 5. 출력부
+# 5. 출력부 (HTML 태그 노출 방지)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 if not raw_df.empty:
-    # 1차 필터링: 선택된 건물만
+    # 필터 적용
     filtered_df = raw_df[raw_df['건물명'].isin(selected_bu)].copy()
     
     if not filtered_df.empty:
@@ -100,7 +100,7 @@ if not raw_df.empty:
                     if not bu_df.empty:
                         st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
                         
-                        # 표 구성
+                        # 표 생성
                         rows_html = "".join([f"""
                             <tr>
                                 <td>{r['장소']}</td><td>{r['시간']}</td><td class="text-left">{r['행사명']}</td>
@@ -122,6 +122,6 @@ if not raw_df.empty:
                         </div>
                         """, unsafe_allow_html=True)
     else:
-        st.info("선택한 건물의 데이터가 없습니다.")
+        st.info("선택한 건물에 해당하는 데이터가 없습니다.")
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.info("해당 기간에 조회된 대관 내역이 없습니다.")
