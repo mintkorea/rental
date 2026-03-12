@@ -3,67 +3,39 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-from fpdf import FPDF
-import os
 
-# 1. 페이지 설정 및 줌/모바일 반응형 강제 해제
+# 1. 페이지 설정 (가장 상단에 위치)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
-# 브라우저에게 줌을 허용하고 가로 폭을 고정하도록 명령
+# 2. CSS 설정 (줌 활성화 및 표 규격 강제 고정)
 st.markdown("""
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    </head>
-    <style>
-        /* 1. 전체 줌 및 터치 조작 허용 */
-        html, body { 
-            zoom: 100%; 
-            touch-action: auto !important; 
-            overflow-x: auto !important;
-        }
+<style>
+    /* 줌 및 모바일 가로스크롤 허용 */
+    html, body { zoom: 100% !important; touch-action: auto !important; }
+    
+    /* 제목 및 요일 스타일 */
+    .main-title { font-size: 22px; font-weight: 800; text-align: center; }
+    .date-header { font-size: 18px; font-weight: 800; padding: 10px; margin-top: 20px; border-bottom: 2px solid #eee; }
+    .date-sat { color: #007BFF; }
+    .date-sun { color: #FF0000; }
+    
+    /* 표 레이아웃: 장소보다 시간을 작게, 모바일에서도 찌그러지지 않게 */
+    .report-table { width: 100%; min-width: 800px; border-collapse: collapse; table-layout: fixed; }
+    .report-table th, .report-table td { border: 1px solid #ddd; padding: 6px 2px; text-align: center; font-size: 13px; }
+    
+    /* 너비 고정: 장소(15%), 시간(85px 고정), 행사명(40%) */
+    .col-place { width: 15%; }
+    .col-time  { width: 85px; } 
+    .col-event { width: 40%; }
+    .col-count { width: 40px; }
+    .col-dept  { width: 20%; }
+    .col-status { width: 45px; }
 
-        /* 2. 제목 및 헤더 스타일 */
-        .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 10px; }
-        .date-header { font-size: 18px !important; font-weight: 800; padding: 10px; margin-top: 25px; border-bottom: 2px solid #ddd; }
-        .date-sat { color: #007BFF !important; } /* 토요일 청색 */
-        .date-sun { color: #FF0000 !important; } /* 일요일 적색 */
-        .building-header { font-size: 16px !important; font-weight: 700; margin: 15px 0 5px 0; padding-left: 10px; border-left: 5px solid #2E5077; }
-
-        /* 3. 표 레이아웃 완전 고정 (최소 800px 유지) */
-        .table-wrapper { width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-        table { 
-            width: 100% !important; 
-            min-width: 800px !important; /* 모바일에서 찌그러짐 방지 */
-            border-collapse: collapse; 
-            table-layout: fixed !important; 
-            margin-bottom: 20px;
-            background-color: white;
-        }
-        th, td { border: 1px solid #ccc; padding: 8px 4px; text-align: center; vertical-align: middle; font-size: 13px; }
-        th { background-color: #f8f9fa; font-weight: 700; }
-
-        /* 4. 열 너비 비율 강제 지정 (시간 필드 최소화) */
-        .col-place { width: 15%; }    /* 장소 */
-        .col-time  { width: 90px; }   /* 시간 (장소보다 작게 고정) */
-        .col-event { width: 40%; }    /* 행사명 (가장 넓게) */
-        .col-count { width: 45px; }   /* 인원 */
-        .col-dept  { width: 20%; }    /* 부서 */
-        .col-stat  { width: 50px; }   /* 상태 */
-
-        /* 행사명 등 긴 텍스트 2줄 제한 및 폰트 최적화 */
-        .text-truncate {
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            word-break: break-all;
-            line-height: 1.3;
-            font-size: 12px;
-        }
-    </style>
+    .ov-text { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.2; }
+</style>
 """, unsafe_allow_html=True)
 
-# 2. 데이터 로직 (스크린샷에서 확인된 성공 로직 그대로 유지)
+# 3. 데이터 로직 (성공했던 로직 그대로)
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -103,13 +75,13 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 3. UI 구성
-st.sidebar.header("🗓️ 조회 설정")
-start_selected = st.sidebar.date_input("시작일", value=now_today)
-end_selected = st.sidebar.date_input("종료일", value=start_selected + timedelta(days=7))
-selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+# 4. 화면 출력
+st.sidebar.title("설정")
+s_date = st.sidebar.date_input("시작일", now_today)
+e_date = st.sidebar.date_input("종료일", s_date + timedelta(days=7))
+target_bu = st.sidebar.multiselect("건물 필터", BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
-all_df = get_data(start_selected, end_selected)
+all_df = get_data(s_date, e_date)
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
@@ -117,43 +89,23 @@ if not all_df.empty:
     for date in sorted(all_df['full_date'].unique()):
         day_df = all_df[all_df['full_date'] == date]
         w_num = day_df.iloc[0]['w_num']
-        color_class = "date-sat" if w_num == 5 else ("date-sun" if w_num == 6 else "")
+        c_class = "date-sat" if w_num == 5 else ("date-sun" if w_num == 6 else "")
+        st.markdown(f'<div class="date-header {c_class}">📅 {date} ({day_df.iloc[0]["요일"]})</div>', unsafe_allow_html=True)
         
-        st.markdown(f'<div class="date-header {color_class}">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
-        
-        for bu in selected_bu:
+        for bu in target_bu:
             bu_df = day_df[day_df['건물명'] == bu]
             if not bu_df.empty:
-                st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
+                st.write(f"🏢 **{bu}**")
+                # 가로 스크롤을 위한 div 감싸기
+                html = '<div style="overflow-x:auto;"><table class="report-table"><thead><tr>'
+                html += '<th class="col-place">장소</th><th class="col-time">시간</th><th class="col-event">행사명</th>'
+                html += '<th class="col-count">인원</th><th class="col-dept">부서</th><th class="col-status">상태</th></tr></thead><tbody>'
                 
-                # 표 생성 (HTML 구조 최적화)
-                table_html = f"""
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="col-place">장소</th>
-                                <th class="col-time">시간</th>
-                                <th class="col-event">행사명</th>
-                                <th class="col-count">인원</th>
-                                <th class="col-dept">부서</th>
-                                <th class="col-stat">상태</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                """
                 for _, r in bu_df.iterrows():
-                    table_html += f"""
-                        <tr>
-                            <td><div class="text-truncate">{r['장소']}</div></td>
-                            <td>{r['시간']}</td>
-                            <td style="text-align:left;"><div class="text-truncate">{r['행사명']}</div></td>
-                            <td>{r['인원']}</td>
-                            <td><div class="text-truncate">{r['부서']}</div></td>
-                            <td>{r['상태']}</td>
-                        </tr>
-                    """
-                table_html += "</tbody></table></div>"
-                st.markdown(table_html, unsafe_allow_html=True)
+                    html += f"<tr><td><div class='ov-text'>{r['장소']}</div></td><td>{r['시간']}</td>"
+                    html += f"<td style='text-align:left;'><div class='ov-text'>{r['행사명']}</div></td>"
+                    html += f"<td>{r['인원']}</td><td><div class='ov-text'>{r['부서']}</div></td><td>{r['상태']}</td></tr>"
+                html += "</tbody></table></div>"
+                st.markdown(html, unsafe_allow_html=True)
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.info("데이터가 없습니다.")
