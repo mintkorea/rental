@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# 1. 페이지 및 기본 설정
+# 1. 페이지 설정 (최적의 줌 환경을 위해 wide 모드 사용)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -12,34 +12,36 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (표 디자인 최적화 및 가동성 확보)
+# 2. CSS 설정 (줌 방해 요소 제거 및 표 디자인)
 st.markdown("""
 <style>
-    .stApp { background-color: white; }
+    /* 브라우저에게 확대를 강제 허용 */
+    html, body { touch-action: auto !important; }
+
     .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 10px; color: #1E3A5F; }
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 10px 0; margin-top: 30px; border-bottom: 2px solid #eee; }
     .building-header { font-size: 16px !important; font-weight: 700; margin-top: 15px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; color: #333; }
     
-    /* 표 레이아웃: 줌 조작 시 글자가 뭉치지 않게 고정 */
-    .table-container { width: 100%; overflow-x: auto; }
+    /* 표 레이아웃: 가로 줌 조작 시 글자가 뭉치지 않게 고정 */
+    .table-container { width: 100%; overflow-x: auto !important; }
     table { width: 100%; border-collapse: collapse; min-width: 850px; table-layout: fixed; margin-bottom: 20px; }
-    th, td { border: 1px solid #ddd; padding: 12px 6px; font-size: 14px; text-align: center; vertical-align: middle; word-break: break-all; }
-    th { background-color: #f8f9fa; font-weight: bold; color: #333; }
+    th, td { border: 1px solid #ddd !important; padding: 10px 4px !important; font-size: 14px; text-align: center; vertical-align: middle; }
+    th { background-color: #f8f9fa; font-weight: bold; }
     
-    /* 열 너비 설정: 시간 필드를 장소보다 슬림하게 */
-    .col-place { width: 125px; }
-    .col-time  { width: 90px; }   /* 시간 열 최적화 */
-    .col-event { width: auto; }   /* 행사명은 잔여 공간 전체 활용 */
+    /* 요청하신 열 너비 최적화 */
+    .col-place { width: 120px; }
+    .col-time  { width: 85px; }   /* 시간을 장소보다 좁게 설정 */
+    .col-event { width: auto; }   /* 행사명은 남는 공간 전체 활용 */
     .col-count { width: 45px; }
-    .col-dept  { width: 115px; }
-    .col-stat  { width: 55px; }
+    .col-dept  { width: 110px; }
+    .col-stat  { width: 50px; }
 
-    /* 행사명 왼쪽 정렬 및 줄간격 개선 */
-    .event-text { text-align: left !important; padding-left: 12px !important; line-height: 1.5; font-weight: 500; }
+    /* 행사명 왼쪽 정렬 */
+    .event-text { text-align: left !important; padding-left: 10px !important; line-height: 1.4; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 처리 로직 (검증된 로직 유지)
+# 3. 데이터 로드 및 처리 (성공했던 로직 유지)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -74,7 +76,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. 메인 UI (PDF 관련 버튼 제거)
+# 4. 메인 UI (PDF 기능 제거됨)
 st.sidebar.title("📅 대관 조회 설정")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=start_selected)
@@ -94,10 +96,7 @@ if not all_df.empty:
             if not bu_df.empty:
                 st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
                 
-                # HTML 테이블 렌더링
-                rows_html = ""
-                for _, r in bu_df.iterrows():
-                    rows_html += f"""
+                rows_html = "".join([f"""
                     <tr>
                         <td>{r['장소']}</td>
                         <td>{r['시간']}</td>
@@ -106,7 +105,7 @@ if not all_df.empty:
                         <td>{r['부서']}</td>
                         <td>{r['상태']}</td>
                     </tr>
-                    """
+                """ for _, r in bu_df.iterrows()])
                 
                 st.markdown(f"""
                 <div class="table-container">
