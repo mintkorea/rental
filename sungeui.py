@@ -25,8 +25,7 @@ st.markdown("""
     table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 8px 4px; font-size: 13px; font-weight: bold; text-align: center; }
     td { border: 1px solid #eee; padding: 8px 6px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
-    /* 강조된 안내 문구 스타일 */
-    .no-data-msg { text-align: center; padding: 30px; color: #FF4B4B; font-size: 16px; font-weight: bold; border: 1px dashed #ddd; border-radius: 10px; margin-top: 20px; }
+    .no-data-msg { padding: 15px; color: #FF4B4B; font-size: 14px; font-weight: bold; background-color: #fff5f5; border: 1px solid #ffe3e3; border-radius: 5px; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -73,36 +72,35 @@ all_df = get_data(start_selected, end_selected)
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-# --- 핵심 로직: 날짜별/건물별 루프 ---
-if not all_df.empty:
-    # 전체 기간에 대해 날짜별로 처리
-    date_range = pd.date_range(start_selected, end_selected).strftime('%Y-%m-%d')
+# --- 수정된 핵심 루프 부분 ---
+# 1. 날짜별로 먼저 나눕니다.
+date_range = pd.date_range(start_selected, end_selected).strftime('%Y-%m-%d')
+
+for date_str in date_range:
+    # 해당 날짜 데이터 필터링
+    day_df = all_df[all_df['full_date'] == date_str] if not all_df.empty else pd.DataFrame()
     
-    for date_str in date_range:
-        day_df = all_df[all_df['full_date'] == date_str]
-        # 해당 날짜의 요일 구하기
-        d_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        w_str = ['월','화','수','목','금','토','일'][d_obj.weekday()]
+    # 요일 표시
+    d_obj = datetime.strptime(date_str, '%Y-%m-%d')
+    w_str = ['월','화','수','목','금','토','일'][d_obj.weekday()]
+    st.markdown(f'<div class="date-header">📅 {date_str} ({w_str}요일)</div>', unsafe_allow_html=True)
+    
+    # 2. 선택된 건물 리스트를 하나씩 무조건 화면에 뿌립니다.
+    for bu in selected_bu:
+        st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
         
-        st.markdown(f'<div class="date-header">📅 {date_str} ({w_str}요일)</div>', unsafe_allow_html=True)
+        # 해당 건물에 내역이 있는지 확인
+        bu_df = day_df[day_df['건물명'] == bu] if not day_df.empty else pd.DataFrame()
         
-        # 사용자가 선택한 건물별로 순회
-        for bu in selected_bu:
-            bu_df = day_df[day_df['건물명'] == bu]
-            st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
-            
-            if not bu_df.empty:
-                # 테이블 출력
-                header_html = """<div class="table-container"><table><thead><tr>
-                                <th style="width:15%;">장소</th><th style="width:15%;">시간</th>
-                                <th style="width:40%;">행사명</th><th style="width:7%;">인원</th>
-                                <th style="width:15%;">부서</th><th style="width:8%;">상태</th>
-                                </tr></thead><tbody>"""
-                rows_html = "".join([f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
-                st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
-            else:
-                # 내역이 없는 건물에 대해 명시적 표시
-                st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-else:
-    # 데이터 자체가 없는 경우
-    st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        if not bu_df.empty:
+            # 내역이 있으면 테이블 출력
+            header_html = """<div class="table-container"><table><thead><tr>
+                            <th style="width:15%;">장소</th><th style="width:15%;">시간</th>
+                            <th style="width:40%;">행사명</th><th style="width:7%;">인원</th>
+                            <th style="width:15%;">부서</th><th style="width:8%;">상태</th>
+                            </tr></thead><tbody>"""
+            rows_html = "".join([f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
+            st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
+        else:
+            # 내역이 없으면 건물 이름 바로 아래에 문구 출력
+            st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
