@@ -6,13 +6,14 @@ import pytz
 import io
 
 # 1. 초기 설정
-st.set_page_config(page_title="성의교정 대관 요약", layout="wide")
+st.set_page_config(page_title="성의교정 대관 현황", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
+# 건물 노출 순서 고정
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. 엑셀 자동화 (엑셀에는 전체 정보를 다 담아 보고서로 활용)
+# 2. 엑셀 자동화 (전체 항목 포함 및 서식 적용)
 def create_excel_automated(df):
     if df.empty: return None
     output = io.BytesIO()
@@ -23,12 +24,13 @@ def create_excel_automated(df):
         cell_fmt = workbook.add_format({'font_size':11, 'border':1, 'align':'center'})
         wrap_fmt = workbook.add_format({'font_size':11, 'border':1, 'align':'left', 'text_wrap':True})
         worksheet.set_default_row(28)
-        # 엑셀 열 너비 설정
-        for i, width in enumerate([13, 6, 15, 18, 15, 40, 7, 15, 8]):
+        # 엑셀 열 너비 (전체 항목 기준)
+        widths = [13, 6, 15, 18, 15, 40, 7, 15, 8]
+        for i, width in enumerate(widths):
             worksheet.set_column(i, i, width, wrap_fmt if i == 5 else cell_fmt)
     return output.getvalue()
 
-# 3. 데이터 추출 및 정렬
+# 3. 데이터 추출 및 정렬 로직
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -58,14 +60,14 @@ def get_data(s_date, e_date):
         return df.sort_values(by=['_dt', 'b_idx', '_tm'])
     except: return pd.DataFrame()
 
-# 4. 화면 레이아웃 (모바일 가시성 극대화)
+# 4. 화면 레이아웃
 st.sidebar.title("📅 설정")
-s_in = st.sidebar.date_input("날짜", value=now_today)
-sel_bu = st.sidebar.multiselect("건물", options=BUILDING_ORDER, default=BUILDING_ORDER)
+date_in = st.sidebar.date_input("조회 날짜", value=now_today)
+sel_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-df = get_data(s_in, s_in) # 시작일=종료일로 고정 (조회 편의성)
+df = get_data(date_in, date_in)
 
-st.markdown(f"### 🗓️ {s_in} 대관 요약")
+st.markdown(f"### 🗓️ {date_in} 대관 상세")
 
 if not df.empty:
     f_df = df[df['건물명'].isin(sel_bu)]
@@ -73,24 +75,20 @@ if not df.empty:
     with st.sidebar:
         st.write("---")
         ex_bin = create_excel_automated(f_df)
-        st.download_button("📥 전체 엑셀 다운로드", data=ex_bin, file_name=f"대관_{s_in}.xlsx", use_container_width=True)
+        st.download_button("📥 전체 내역 엑셀 다운로드", data=ex_bin, file_name=f"대관_{date_in}.xlsx", use_container_width=True)
 
-    # [중요] 건물별로 정보를 걸러서 '핵심 정보'만 노출
+    # 건물별 순차 노출
     for b_name in BUILDING_ORDER:
-        if b_name in f_df['건물명'].values:
+        if b_name in sel_bu: # 필터링에서 선택된 건물만 표시
+            st.markdown(f"#### 📍 {b_name}")
             b_data = f_df[f_df['건물명'] == b_name]
             
-            st.markdown(f"#### 📍 {b_name}")
-            
-            # 모바일 화면 공간 확보를 위해 불필요한 열 제거
-            # 날짜, 요일, 건물명은 이미 상단에 있으므로 표에서 제외
-            display_df = b_data[['시간', '장소', '행사명', '부서']].copy()
-            
-            # 표 출력
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True # 인덱스 번호 숨기기
-            )
+            if not b_data.empty:
+                # 요청사항 반영: 시간-장소-행사명 순서 및 인원/상태 추가
+                display_cols = ['시간', '장소', '행사명', '인원', '부서', '상태']
+                st.dataframe(b_data[display_cols], use_container_width=True, hide_index=True)
+            else:
+                # 대관 정보가 없는 경우 메시지 노출
+                st.info(f"해당 일자에 {b_name} 대관 내역이 없습니다.")
 else:
-    st.info("조회된 데이터가 없습니다.")
+    st.warning("조회된 전체 데이터가 없습니다.")
