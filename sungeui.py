@@ -3,51 +3,51 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-from fpdf import FPDF
-import os
 
-# 1. 초기 설정
+# 1. 초기 설정 및 CSS (다크모드 완벽 방어)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
-DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 스타일 (다크모드 방어 및 요일 색상 강제 적용)
 st.markdown("""
 <style>
-    /* 다크모드 무력화: 배경 흰색, 글자 검은색 강제 */
+    /* 다크모드 무력화: 무조건 흰색 배경에 검은 글자 */
     .stApp { background-color: white !important; color: black !important; }
     
-    .main-title { font-size: 24px !important; font-weight: 800; text-align: center; margin-bottom: 20px; color: #1E3A5F !important; }
+    .main-title { font-size: 24px !important; font-weight: 800; text-align: center; color: #1E3A5F !important; margin-bottom: 20px; }
     
-    /* 요일별 색상 */
+    /* 요일 색상 */
     .sat { color: #4A90E2 !important; font-weight: bold; } /* 토요일: 청색 */
     .sun-hol { color: #E74C3C !important; font-weight: bold; } /* 일요일/공휴일: 적색 */
-    .weekday { color: white !important; } /* 헤더용 평일: 흰색 */
     
+    /* 날짜 헤더 */
     .date-header { 
-        background-color: #2E5077; color: white; padding: 10px 15px; 
+        background-color: #2E5077 !important; color: white !important; padding: 10px 15px; 
         border-radius: 5px; margin-top: 30px; display: flex; 
         justify-content: space-between; align-items: center;
     }
     
     .building-header { font-size: 16px !important; font-weight: 700; margin-top: 20px; border-left: 5px solid #2E5077; padding-left: 10px; color: #333 !important; }
     
-    /* 테이블 스타일 (모바일 최적화 너비 및 중앙정렬) */
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; background-color: white; border: 1px solid #ddd; }
+    /* 테이블 및 셀 스타일 */
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; background-color: white !important; border: 1px solid #ddd !important; }
     th { background-color: #f8f9fa !important; color: #333 !important; border: 1px solid #ccc !important; text-align: center !important; padding: 10px 2px; font-size: 13px; }
-    td { border: 1px solid #eee !important; color: #333 !important; padding: 10px 5px; font-size: 13px; vertical-align: middle; }
+    td { border: 1px solid #eee !important; color: #333 !important; padding: 10px 5px; font-size: 13px; vertical-align: middle; background-color: white !important; }
     
-    /* 결과 없음 박스 */
-    .no-data-msg { text-align: center; padding: 40px; color: #d9534f; font-weight: bold; border: 2px dashed #d9534f; border-radius: 10px; margin-top: 20px; }
+    /* 결과 없음 경고 박스 */
+    .no-data-msg { 
+        text-align: center; padding: 40px; color: #d9534f !important; 
+        background-color: #fff5f5 !important; font-weight: bold; 
+        border: 2px dashed #d9534f !important; border-radius: 10px; margin-top: 20px; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 (allowDay 로직 포함)
+# 2. 데이터 로드 (allowDay 로직 절대 보존)
 @st.cache_data(ttl=60)
-def get_data(s_date, e_date):
+def get_rental_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": s_date.isoformat(), "end": e_date.isoformat()}
     try:
@@ -60,18 +60,19 @@ def get_data(s_date, e_date):
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
-            # allowDay 처리
+            # [핵심] allowDay 요일 제한 소스 복구
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = [int(d.strip()) for d in allow_day_raw.split(',') if d.strip().isdigit()] if allow_day_raw and allow_day_raw.lower() != 'none' else []
             
             curr = s_dt
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
+                    # 요일 필터링 (1:월 ~ 7:일)
                     if not allowed_days or (curr.weekday() + 1) in allowed_days:
                         d_str = curr.strftime('%Y-%m-%d')
                         w_idx = curr.weekday()
                         
-                        # 요일 색상 결정
+                        # 요일 색상 클래스
                         c_class = "weekday"
                         if w_idx == 5: c_class = "sat"
                         elif w_idx == 6: c_class = "sun-hol"
@@ -92,26 +93,32 @@ def get_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 메인 UI
+# 3. 메인 화면 구성
 with st.sidebar:
-    st.header("📅 조회 설정")
+    st.header("📅 필터 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
+    sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["의생명산업연구원"])
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 if sel_bu:
-    df = get_data(s_date, e_date)
-    if not df.empty:
+    df = get_rental_data(s_date, e_date)
+    
+    if df.empty:
+        st.markdown('<div class="no-data-msg">해당 기간에 조회된 전체 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+    else:
         f_df = df[df['건물명'].isin(sel_bu)].copy()
-        if not f_df.empty:
+        
+        # 선택한 건물에만 내역이 없을 때 (의산연 등)
+        if f_df.empty:
+            st.markdown(f'<div class="no-data-msg">선택하신 건물({", ".join(sel_bu)})의 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        else:
             f_df['건물명'] = pd.Categorical(f_df['건물명'], categories=BUILDING_ORDER, ordered=True)
             f_df = f_df.sort_values(by=['full_date', '건물명', '시간'])
 
             for date in sorted(f_df['full_date'].unique()):
                 d_df = f_df[f_df['full_date'] == date]
-                # 날짜 헤더 (요일 색상 적용)
                 st.markdown(f'''
                     <div class="date-header">
                         <span>📅 {date}</span>
@@ -123,7 +130,7 @@ if sel_bu:
                     b_df = d_df[d_df['건물명'] == b]
                     if not b_df.empty:
                         st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
-                        # 부서 셀 너비 확보 및 표 중앙 정렬
+                        # 부서 셀 너비 25% 확보
                         table_html = """
                         <table>
                             <thead>
@@ -136,9 +143,5 @@ if sel_bu:
                         for _, r in b_df.iterrows():
                             table_html += f"<tr><td style='text-align:left'>{r['장소']}</td><td style='text-align:center'>{r['시간']}</td><td style='text-align:left'>{r['행사명']}</td><td style='text-align:center'>{r['인원']}</td><td style='text-align:left'>{r['부서']}</td><td style='text-align:center'>{r['상태']}</td></tr>"
                         st.markdown(table_html + "</tbody></table>", unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="no-data-msg">선택하신 건물의 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="no-data-msg">해당 기간에 조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
-    st.warning("건물을 하나 이상 선택해 주세요.")
+    st.warning("조회할 건물을 선택해주세요.")
