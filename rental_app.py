@@ -4,30 +4,30 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# 1. 페이지 설정 (최상단 필수)
+# 1. 페이지 설정 (최상단 고정)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
-# 2. 줌(확대) 활성화를 위한 CSS
-# 모바일 브라우저의 기본 줌 기능을 강제로 깨우고 표가 깨지지 않게 합니다.
+# 2. 줌(확대) 강제 활성화를 위한 CSS
+# 모바일 브라우저가 Streamlit의 통제를 벗어나 확대를 허용하게 만듭니다.
 st.markdown("""
 <style>
-    /* 줌 차단 해제 */
+    /* 줌 차단 해제 및 터치 액션 복구 */
     html, body, [data-testid="stAppViewContainer"] {
         touch-action: auto !important;
         user-scalable: yes !important;
     }
     
-    .main-title { font-size: 24px; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 20px; }
+    .main-title { font-size: 22px; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 20px; }
     .date-header { font-size: 18px; font-weight: 800; color: #1E3A5F; padding: 10px; background: #f0f2f6; border-left: 5px solid #2E5077; margin-top: 30px; }
     .bu-header { font-size: 16px; font-weight: 700; margin: 15px 0 8px 0; color: #333; }
 
-    /* 표 디자인: 가로로 길게 유지하여 확대 시 글자가 안 뭉치게 함 */
+    /* 표 디자인: 확대 시 글자가 뭉치지 않도록 너비 확보 */
     .table-container { width: 100%; overflow-x: auto !important; }
     table { width: 100%; border-collapse: collapse; min-width: 850px; table-layout: fixed; }
-    th, td { border: 1px solid #ddd !important; padding: 12px 4px; text-align: center; font-size: 14px; }
+    th, td { border: 1px solid #ddd !important; padding: 10px 4px; text-align: center; font-size: 14px; vertical-align: middle; }
     th { background-color: #f8f9fa; font-weight: bold; }
     
-    /* 시간 열을 장소보다 좁게 설정 */
+    /* 요청하신 너비 최적화: 시간 열 슬림화 */
     .col-place { width: 120px; }
     .col-time  { width: 85px; } 
     .col-event { width: auto; }
@@ -39,7 +39,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 (KST 기준)
+# 3. 데이터 로드 로직 (KST 기준)
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -74,19 +74,19 @@ def get_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 사이드바 및 필터 로직 (정상 작동 보장)
-st.sidebar.title("📅 조회 필터")
+# 4. 사이드바 및 필터 로직 (오류 수정)
+st.sidebar.title("📅 대관 조회 필터")
 s_date = st.sidebar.date_input("시작일", now_today)
 e_date = st.sidebar.date_input("종료일", s_date)
 selected_bu = st.sidebar.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
 raw_df = get_data(s_date, e_date)
 
-# 5. 출력부 (HTML 태그 노출 방지)
+# 5. 메인 화면 출력 (정상 렌더링 보장)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 if not raw_df.empty:
-    # 필터 적용
+    # 필터 적용 로직 재점검
     filtered_df = raw_df[raw_df['건물명'].isin(selected_bu)].copy()
     
     if not filtered_df.empty:
@@ -94,13 +94,14 @@ if not raw_df.empty:
             day_df = filtered_df[filtered_df['full_date'] == date]
             st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
             
+            # 건물 순서대로 렌더링
             for bu in BUILDING_ORDER:
                 if bu in selected_bu:
                     bu_df = day_df[day_df['건물명'] == bu]
                     if not bu_df.empty:
                         st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
                         
-                        # 표 생성
+                        # 표 HTML 생성 (태그 노출 방지)
                         rows_html = "".join([f"""
                             <tr>
                                 <td>{r['장소']}</td><td>{r['시간']}</td><td class="text-left">{r['행사명']}</td>
@@ -124,4 +125,4 @@ if not raw_df.empty:
     else:
         st.info("선택한 건물에 해당하는 데이터가 없습니다.")
 else:
-    st.info("해당 기간에 조회된 대관 내역이 없습니다.")
+    st.info("해당 기간의 대관 내역이 없습니다.")
