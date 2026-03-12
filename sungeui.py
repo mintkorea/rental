@@ -36,12 +36,8 @@ st.markdown("""
     th { background-color: #f8f9fa !important; color: #333 !important; border: 1px solid #ccc !important; text-align: center !important; padding: 10px 2px; font-size: 13px; }
     td { border: 1px solid #eee !important; color: #333 !important; padding: 10px 5px; font-size: 13px; vertical-align: middle; background-color: white !important; }
     
-    /* 결과 없음 경고 박스 */
-    .no-data-msg { 
-        text-align: center; padding: 40px; color: #d9534f !important; 
-        background-color: #fff5f5 !important; font-weight: bold; 
-        border: 2px dashed #d9534f !important; border-radius: 10px; margin-top: 20px; 
-    }
+    /* 결과 없음 경고 문구 (특정 건물 내역 없을 때) */
+    .no-building-data { color: #d9534f; font-size: 14px; font-weight: bold; padding: 10px; border: 1px dashed #d9534f; border-radius: 5px; margin-top: 5px; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -60,19 +56,17 @@ def get_rental_data(s_date, e_date):
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
-            # [핵심] allowDay 요일 제한 소스 복구
+            # [중요] allowDay 요일 제한 소스 (사용자님 원본 로직)
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = [int(d.strip()) for d in allow_day_raw.split(',') if d.strip().isdigit()] if allow_day_raw and allow_day_raw.lower() != 'none' else []
             
             curr = s_dt
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
-                    # 요일 필터링 (1:월 ~ 7:일)
                     if not allowed_days or (curr.weekday() + 1) in allowed_days:
                         d_str = curr.strftime('%Y-%m-%d')
                         w_idx = curr.weekday()
                         
-                        # 요일 색상 클래스
                         c_class = "weekday"
                         if w_idx == 5: c_class = "sat"
                         elif w_idx == 6: c_class = "sun-hol"
@@ -93,55 +87,57 @@ def get_rental_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 3. 메인 화면 구성
+# 3. 사이드바 및 메인 출력
 with st.sidebar:
-    st.header("📅 필터 설정")
+    st.header("📅 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["의생명산업연구원"])
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 if sel_bu:
     df = get_rental_data(s_date, e_date)
     
+    # 1. 해당 날짜에 데이터가 아예 없는 경우 처리
     if df.empty:
-        st.markdown('<div class="no-data-msg">해당 기간에 조회된 전체 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        st.info("해당 기간에 조회된 전체 대관 내역이 없습니다.")
     else:
-        f_df = df[df['건물명'].isin(sel_bu)].copy()
+        # 건물 순서 정렬을 위한 카테고리 설정
+        df['건물명'] = pd.Categorical(df['건물명'], categories=BUILDING_ORDER, ordered=True)
         
-        # 선택한 건물에만 내역이 없을 때 (의산연 등)
-        if f_df.empty:
-            st.markdown(f'<div class="no-data-msg">선택하신 건물({", ".join(sel_bu)})의 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-        else:
-            f_df['건물명'] = pd.Categorical(f_df['건물명'], categories=BUILDING_ORDER, ordered=True)
-            f_df = f_df.sort_values(by=['full_date', '건물명', '시간'])
-
-            for date in sorted(f_df['full_date'].unique()):
-                d_df = f_df[f_df['full_date'] == date]
-                st.markdown(f'''
-                    <div class="date-header">
-                        <span>📅 {date}</span>
-                        <span class="{d_df.iloc[0]['color_class']}">({d_df.iloc[0]['요일']}요일)</span>
-                    </div>
-                ''', unsafe_allow_html=True)
+        for date in sorted(df['full_date'].unique()):
+            d_df = df[df['full_date'] == date]
+            
+            # 날짜 헤더 출력
+            st.markdown(f'''
+                <div class="date-header">
+                    <span>📅 {date}</span>
+                    <span class="{d_df.iloc[0]['color_class']}">({d_df.iloc[0]['요일']}요일)</span>
+                </div>
+            ''', unsafe_allow_html=True)
+            
+            # 선택된 각 건물별로 루프
+            for b in sel_bu:
+                b_df = d_df[d_df['건물명'] == b]
+                st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
                 
-                for b in sel_bu:
-                    b_df = d_df[d_df['건물명'] == b]
-                    if not b_df.empty:
-                        st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
-                        # 부서 셀 너비 25% 확보
-                        table_html = """
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th style='width:18%'>장소</th><th style='width:17%'>시간</th><th style='width:20%'>행사명</th>
-                                    <th style='width:10%'>인원</th><th style='width:25%'>부서</th><th style='width:10%'>상태</th>
-                                </tr>
-                            </thead>
-                            <tbody>"""
-                        for _, r in b_df.iterrows():
-                            table_html += f"<tr><td style='text-align:left'>{r['장소']}</td><td style='text-align:center'>{r['시간']}</td><td style='text-align:left'>{r['행사명']}</td><td style='text-align:center'>{r['인원']}</td><td style='text-align:left'>{r['부서']}</td><td style='text-align:center'>{r['상태']}</td></tr>"
-                        st.markdown(table_html + "</tbody></table>", unsafe_allow_html=True)
+                if not b_df.empty:
+                    # 데이터가 있는 경우 테이블 출력
+                    table_html = """
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style='width:18%'>장소</th><th style='width:17%'>시간</th><th style='width:20%'>행사명</th>
+                                <th style='width:10%'>인원</th><th style='width:25%'>부서</th><th style='width:10%'>상태</th>
+                            </tr>
+                        </thead>
+                        <tbody>"""
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        table_html += f"<tr><td style='text-align:left'>{r['장소']}</td><td style='text-align:center'>{r['시간']}</td><td style='text-align:left'>{r['행사명']}</td><td style='text-align:center'>{r['인원']}</td><td style='text-align:left'>{r['부서']}</td><td style='text-align:center'>{r['상태']}</td></tr>"
+                    st.markdown(table_html + "</tbody></table>", unsafe_allow_html=True)
+                else:
+                    # [핵심] 의산연 등 선택했지만 데이터가 없는 건물에 대한 표시
+                    st.markdown(f'<div class="no-building-data">"{b}"에 대한 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
     st.warning("조회할 건물을 선택해주세요.")
