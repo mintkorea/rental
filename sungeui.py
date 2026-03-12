@@ -148,3 +148,4 @@ for date_str in date_range:
             st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
         else:
             st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+
