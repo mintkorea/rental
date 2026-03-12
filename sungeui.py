@@ -4,58 +4,60 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# 1. 스타일 설정 (부서 셀 너비 확장 및 요일 색상)
+# 1. 페이지 설정 (다크모드 강제 방어 및 스타일)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
 st.markdown("""
 <style>
+    /* 전체 배경 흰색, 글자 검정 고정 */
     .stApp { background-color: white !important; color: black !important; }
     
-    /* 요일별 색상 */
+    /* 요일별 색상 클래스 */
     .sat { color: #4A90E2 !important; font-weight: bold; } /* 토요일: 청색 */
     .sun-hol { color: #E74C3C !important; font-weight: bold; } /* 일요일/공휴일: 적색 */
+    .weekday { color: white !important; } /* 평일: 흰색 */
     
+    /* 날짜 헤더 디자인 */
     .date-header { 
         background-color: #2E5077; color: white; padding: 10px 15px; 
-        border-radius: 5px; margin-top: 25px; display: flex; 
+        border-radius: 5px; margin-top: 30px; display: flex; 
         justify-content: space-between; align-items: center;
     }
     
+    /* 테이블 헤더 중앙 정렬 및 모바일 최적화 */
     table { width: 100%; border-collapse: collapse; table-layout: fixed; background-color: white; border: 1px solid #ddd; }
     th { background-color: #f8f9fa !important; color: #333 !important; border: 1px solid #ccc !important; text-align: center !important; padding: 10px 2px; font-size: 13px; }
     td { border: 1px solid #eee !important; color: #333 !important; padding: 10px 5px; font-size: 13px; vertical-align: middle; }
+    
+    /* 결과 없음 안내창 */
+    .empty-msg { text-align: center; padding: 40px; color: #ff4b4b; border: 2px dashed #ff4b4b; border-radius: 10px; margin-top: 20px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 데이터 처리 (기간 대관 날짜별 확장 로직 복구)
+# 2. 데이터 및 공휴일 설정
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 HOLIDAYS = ["2026-01-01", "2026-03-01", "2026-05-05", "2026-06-06", "2026-08-15", "2026-10-03", "2026-10-09", "2026-12-25"]
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 @st.cache_data(ttl=60)
-def get_extended_data(s_date, e_date):
+def get_rental_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": s_date.isoformat(), "end": e_date.isoformat()}
     try:
         res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        res.raise_for_status()
         raw = res.json().get('res', [])
         rows = []
         for item in raw:
             if not item.get('startDt'): continue
-            
-            # 기간 대관을 위해 시작일과 종료일을 가져옴
-            start_curr = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
-            end_limit = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
-            # 중요: 기간 내의 모든 날짜를 순회하며 행 생성 (이 부분이 복구된 핵심입니다)
-            temp_date = start_curr
-            while temp_date <= end_limit:
-                if s_date <= temp_date <= e_date:
-                    d_str = temp_date.strftime('%Y-%m-%d')
-                    w_idx = temp_date.weekday()
-                    
-                    # 요일 색상 결정
+            s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
+            e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            curr = s_dt
+            while curr <= e_dt:
+                if s_date <= curr <= e_date:
+                    d_str = curr.strftime('%Y-%m-%d')
+                    w_idx = curr.weekday()
                     c_class = "weekday"
                     if w_idx == 5: c_class = "sat"
                     elif w_idx == 6 or d_str in HOLIDAYS: c_class = "sun-hol"
@@ -72,30 +74,31 @@ def get_extended_data(s_date, e_date):
                         '부서': str(item.get('mgDeptNm', '') or '-'),
                         '상태': '확정' if item.get('status') == 'Y' else '대기'
                     })
-                temp_date += timedelta(days=1)
-        # 데이터 내 실제 중복만 제거하고 날짜별 행은 유지
-        return pd.DataFrame(rows).drop_duplicates()
+                curr += timedelta(days=1)
+        return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 3. 사이드바 및 출력
+# 3. 사이드바 (None 방어)
 with st.sidebar:
     st.header("📅 필터 설정")
-    s_input = st.date_input("시작일", value=now_today)
-    e_input = st.date_input("종료일", value=s_input)
+    s_d = st.date_input("시작일", value=now_today)
+    e_d = st.date_input("종료일", value=s_d)
     sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
-st.markdown('<h2 style="text-align:center;">🏫 성의교정 실시간 대관 현황</h2>', unsafe_allow_html=True)
+# 4. 결과 출력
+st.markdown('<h2 style="text-align:center;">🏫 성의교정 대관 현황 조회</h2>', unsafe_allow_html=True)
 
 if sel_bu:
-    df = get_extended_data(s_input, e_input)
-    if not df.empty:
-        f_df = df[df['건물명'].isin(sel_bu)].copy()
+    all_df = get_rental_data(s_d, e_d)
+    if not all_df.empty:
+        f_df = all_df[all_df['건물명'].isin(sel_bu)].copy()
         if not f_df.empty:
             f_df['건물명'] = pd.Categorical(f_df['건물명'], categories=BUILDING_ORDER, ordered=True)
             f_df = f_df.sort_values(by=['full_date', '건물명', '시간'])
 
             for date in sorted(f_df['full_date'].unique()):
                 d_df = f_df[f_df['full_date'] == date]
+                # 날짜 헤더 (요일 색상 적용)
                 st.markdown(f'''
                     <div class="date-header">
                         <span>📅 {date}</span>
@@ -106,14 +109,14 @@ if sel_bu:
                 for b in sel_bu:
                     b_df = d_df[d_df['건물명'] == b]
                     if not b_df.empty:
-                        st.markdown(f'<div style="margin-top:15px; font-weight:bold; border-left:5px solid #2E5077; padding-left:10px;">🏢 {b}</div>', unsafe_allow_html=True)
-                        # 부서 셀 너비 25% 고정 및 레이아웃 최적화
+                        st.markdown(f'<div style="margin:15px 0 10px 0; font-weight:bold; border-left:5px solid #2E5077; padding-left:10px;">🏢 {b}</div>', unsafe_allow_html=True)
+                        # 모바일 대응 표 구조
                         table_html = """
                         <table>
                             <thead>
                                 <tr>
-                                    <th style='width:18%'>장소</th><th style='width:17%'>시간</th><th style='width:20%'>행사명</th>
-                                    <th style='width:10%'>인원</th><th style='width:25%'>부서</th><th style='width:10%'>상태</th>
+                                    <th style='width:18%'>장소</th><th style='width:17%'>시간</th><th style='width:29%'>행사명</th>
+                                    <th style='width:12%'>인원</th><th style='width:12%'>부서</th><th style='width:12%'>상태</th>
                                 </tr>
                             </thead>
                             <tbody>"""
@@ -121,6 +124,8 @@ if sel_bu:
                             table_html += f"<tr><td style='text-align:left'>{r['장소']}</td><td style='text-align:center'>{r['시간']}</td><td style='text-align:left'>{r['행사명']}</td><td style='text-align:center'>{r['인원']}</td><td style='text-align:left'>{r['부서']}</td><td style='text-align:center'>{r['상태']}</td></tr>"
                         st.markdown(table_html + "</tbody></table>", unsafe_allow_html=True)
         else:
-            st.markdown('<div style="text-align:center; padding:30px; color:#666;">선택한 건물의 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="empty-msg">선택한 건물의 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div style="text-align:center; padding:30px; color:#666;">조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="empty-msg">해당 기간의 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+else:
+    st.warning("조회할 건물을 선택해주세요.")
