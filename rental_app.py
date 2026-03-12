@@ -138,3 +138,4 @@ if not all_df.empty:
                 st.markdown(html_code, unsafe_allow_html=True)
 else:
     st.write("조회된 데이터가 없습니다.")
+
