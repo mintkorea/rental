@@ -6,7 +6,7 @@ import pytz
 from fpdf import FPDF
 import os
 
-# 1. 페이지 설정
+# 1. 페이지 및 기본 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -14,14 +14,14 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정
+# 2. CSS 설정 (웹 화면 개행 및 스타일)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
     .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 20px; color: #1E3A5F; }
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 12px 0; margin-top: 35px; border-bottom: 2px solid #2E5077; }
     .building-header { font-size: 15px !important; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; color: #333; }
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; border: 1px solid #dee2e6; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 12px 4px; font-size: 13px; font-weight: bold; text-align: center; }
     td { border: 1px solid #eee; padding: 12px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-word; }
 </style>
@@ -41,6 +41,7 @@ def get_data(s_date, e_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = []
             if allow_day_raw and allow_day_raw.lower() != 'none':
@@ -65,7 +66,7 @@ def get_data(s_date, e_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. PDF 생성 함수 (겹침 현상 해결 버전)
+# 4. PDF 생성 함수 (겹침 및 개행 문제 해결)
 def create_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -96,36 +97,35 @@ def create_pdf(df):
             
             pdf.set_font("Nanum", size=9) if os.path.exists(font_path) else pdf.set_font("Arial", size=9)
             for _, row in bu_df.iterrows():
-                # 줄바꿈 높이 계산 (행사명 125mm 너비 기준)
                 line_h = 7
-                # 실제 출력 전 텍스트 높이 측정
-                test_pdf = FPDF(orientation='L', unit='mm', format='A4')
-                test_pdf.add_page()
-                if os.path.exists(font_path): test_pdf.add_font("Nanum", "", font_path, uni=True); test_pdf.set_font("Nanum", size=9)
+                event_txt = str(row['행사명'])
                 
-                prev_y = test_pdf.get_y()
-                test_pdf.multi_cell(125, line_h, str(row['행사명']))
-                row_h = max(10, test_pdf.get_y() - prev_y) # 최소 높이 10mm
-                
-                # 실제 출력
+                # 높이 미리 계산
                 cur_x, cur_y = pdf.get_x(), pdf.get_y()
+                # 임시로 그려서 높이 파악
+                pdf.multi_cell(125, line_h, " " + event_txt, border=0, align='L')
+                end_y = pdf.get_y()
+                row_h = max(10, end_y - cur_y)
                 
-                # 1~2열 (장소, 시간)
+                # 실제 출력 위치로 복원
+                pdf.set_xy(cur_x, cur_y)
+                
+                # 셀 출력 (모든 칸 높이 row_h로 통일)
                 pdf.cell(35, row_h, str(row['장소']), border=1, align='C')
                 pdf.cell(35, row_h, str(row['시간']), border=1, align='C')
                 
-                # 3열 (행사명 - MultiCell 처리)
+                # 행사명 칸 (MultiCell 사용)
                 evt_x, evt_y = pdf.get_x(), pdf.get_y()
-                pdf.rect(evt_x, evt_y, 125, row_h) # 테두리 먼저 그리기
-                pdf.multi_cell(125, line_h, " " + str(row['행사명']), border=0, align='L')
+                pdf.rect(evt_x, evt_y, 125, row_h) # 테두리
+                pdf.multi_cell(125, line_h, " " + event_txt, border=0, align='L')
                 
-                # 4~6열 (인원, 부서, 상태 - 좌표 복구 후 출력)
+                # 나머지 칸
                 pdf.set_xy(evt_x + 125, evt_y)
                 pdf.cell(15, row_h, str(row['인원']), border=1, align='C')
                 pdf.cell(50, row_h, str(row['부서']), border=1, align='C')
                 pdf.cell(15, row_h, str(row['상태']), border=1, align='C')
                 
-                pdf.set_y(evt_y + row_h) # 다음 행 위치 강제 지정
+                pdf.ln(row_h) # 다음 줄로 확실히 이동
             pdf.ln(5)
     return bytes(pdf.output(dest='S'))
 
@@ -138,16 +138,19 @@ selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, de
 raw_df = get_data(start_selected, end_selected)
 
 if not raw_df.empty:
+    # 💡 [수정] KeyError 방지를 위한 정확한 필터링 로직
     filtered_df = raw_df[raw_df['건물명'].isin(selected_bu)].copy()
-    filtered_df['건물명'] = pd.Categorical(filtered_df['filtered_df' if 'filtered_df' in globals() else '건물명'], categories=BUILDING_ORDER, ordered=True)
-    filtered_df = filtered_df.sort_values(by=['full_date', '건물명', '시간'])
-
+    
     if not filtered_df.empty:
+        # 카테고리 설정 및 정렬
+        filtered_df['건물명'] = pd.Categorical(filtered_df['건물명'], categories=BUILDING_ORDER, ordered=True)
+        filtered_df = filtered_df.sort_values(by=['full_date', '건물명', '시간'])
+
         with st.sidebar:
-            # 💡 [해결] None 문자열 표출 방지: if문 내부에서 바로 생성/다운로드 처리
             if st.button("📄 PDF 생성 및 준비"):
-                pdf_data = create_pdf(filtered_df)
-                st.download_button("📥 PDF 다운로드", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
+                # 💡 [수정] None 노출 방지: 변수 할당 없이 버튼 안에서 즉시 처리
+                pdf_bytes = create_pdf(filtered_df)
+                st.download_button("📥 PDF 다운로드", data=pdf_bytes, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
 
         st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
         for date in sorted(filtered_df['full_date'].unique()):
