@@ -3,15 +3,13 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-from fpdf import FPDF
-import io
 
-# 1. 초기 설정 (다크모드 완벽 방어)
+# 1. 초기 설정 (다크모드 방어 및 배경색 고정)
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# 건물 목록 (공백 등을 제거하고 매칭하기 위해 리스트 최적화)
+# 건물 목록 (공백 등을 최대한 제거하고 매칭하기 위해 구성)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 st.markdown("""
@@ -27,14 +25,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 왼쪽 사이드바 위치 고정
+# 2. 왼쪽 사이드바 (사용자님 요청 위치 사수)
 with st.sidebar:
     st.header("📅 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
-# 3. 데이터 로드 (매칭 로직 강화)
+# 3. 데이터 로드 및 매칭 로직 (공백 제거 매칭 도입)
 @st.cache_data(ttl=60)
 def load_data(start, end):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -46,12 +44,13 @@ def load_data(start, end):
         for item in raw:
             if not item.get('startDt'): continue
             
-            # 건물명 공백 제거 후 가져오기
+            # 건물명에서 공백을 모두 제거하여 '의생명산업연구원'으로 통일
             raw_bu_nm = str(item.get('buNm', '')).replace(" ", "")
             
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
+            # allowDay 로직
             allow_day_raw = str(item.get('allowDay', ''))
             allowed = [int(d.strip()) for d in allow_day_raw.split(',') if d.strip().isdigit()] if allow_day_raw.lower() != 'none' else []
             
@@ -61,7 +60,7 @@ def load_data(start, end):
                     if not allowed or (curr.weekday() + 1) in allowed:
                         data_list.append({
                             'date': curr.strftime('%Y-%m-%d'),
-                            'building': raw_bu_nm, # 공백 제거된 이름 저장
+                            'building': raw_bu_nm, 
                             'place': item.get('placeNm', ''),
                             'time': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
                             'event': item.get('eventNm', ''),
@@ -74,8 +73,8 @@ def load_data(start, end):
     except:
         return pd.DataFrame()
 
-# 4. 출력 로직
-st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
+# 4. 화면 출력 (루프 구조 전면 수정)
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 if sel_bu:
     df = load_data(s_date, e_date)
@@ -89,7 +88,7 @@ if sel_bu:
         for b in sel_bu:
             st.markdown(f'<div class="building-header">🏢 {b}</div>', unsafe_allow_html=True)
             
-            # 필터링 시에도 공백을 제거하고 비교하여 매칭률 극대화
+            # 검색할 때도 공백을 제거하고 매칭하여 오류 차단
             search_b = b.replace(" ", "")
             if not df.empty:
                 filtered = df[(df['date'] == d_str) & (df['building'] == search_b)]
@@ -97,11 +96,13 @@ if sel_bu:
                 filtered = pd.DataFrame()
 
             if not filtered.empty:
+                # 데이터가 있으면 테이블 출력
                 html = "<table><thead><tr><th style='width:18%'>장소</th><th style='width:15%'>시간</th><th>행사명</th><th style='width:8%'>인원</th><th style='width:20%'>부서</th><th style='width:8%'>상태</th></tr></thead><tbody>"
                 for _, r in filtered.sort_values('time').iterrows():
                     html += f"<tr><td style='text-align:left'>{r['place']}</td><td>{r['time']}</td><td style='text-align:left'>{r['event']}</td><td>{r['count']}</td><td style='text-align:left'>{r['dept']}</td><td>{r['status']}</td></tr>"
                 st.markdown(html + "</tbody></table>", unsafe_allow_html=True)
             else:
+                # 데이터가 없으면 '내역 없음' 상자 출력
                 st.markdown(f'<div class="no-data-box">"{b}"에 대한 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
     st.info("왼쪽 사이드바에서 건물을 선택해 주세요.")
