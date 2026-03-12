@@ -14,21 +14,23 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정
+# 2. CSS 설정 (상하 여백 및 테이블 레이아웃 최적화)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
     .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 20px; color: #1E3A5F; }
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 12px 0; margin-top: 35px; border-bottom: 2px solid #2E5077; }
     .building-header { font-size: 15px !important; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; color: #333; }
+    
     .table-container { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; border: 1px solid #dee2e6; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 12px 4px; font-size: 13px; font-weight: bold; text-align: center; color: #495057; }
-    td { border: 1px solid #eee; padding: 10px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: keep-all; overflow-wrap: break-word; }
+    td { border: 1px solid #eee; padding: 12px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: keep-all; overflow-wrap: break-word; }
+    tr:hover { background-color: #fdfdfd; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 함수
+# 3. 데이터 로드 함수 (요일 None값 에러 방어)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -43,6 +45,7 @@ def get_data(s_date, e_date):
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
+            # 요일 필터 데이터 안전하게 파싱 (isdigit 체크로 'None' 등 문자열 방어)
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = []
             if allow_day_raw and allow_day_raw.lower() != 'none':
@@ -68,7 +71,7 @@ def get_data(s_date, e_date):
     except:
         return pd.DataFrame()
 
-# 4. PDF 생성 함수
+# 4. PDF 생성 함수 (바이너리 포맷 에러 수정)
 def create_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -104,7 +107,9 @@ def create_pdf(df):
                 pdf.cell(15, 9, str(row['상태']), border=1, align='C')
                 pdf.ln()
             pdf.ln(5)
-    return pdf.output(dest='S')
+    
+    # [핵심] bytearray를 bytes로 변환하여 반환 (Streamlit 호환성)
+    return bytes(pdf.output(dest='S'))
 
 # 5. 메인 UI
 st.sidebar.title("📅 설정")
@@ -115,6 +120,7 @@ selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, de
 raw_df = get_data(start_selected, end_selected)
 
 if not raw_df.empty:
+    # 필터링 및 정렬
     filtered_df = raw_df[raw_df['건물명'].isin(selected_bu)].copy()
     filtered_df['건물명'] = pd.Categorical(filtered_df['건물명'], categories=BUILDING_ORDER, ordered=True)
     filtered_df = filtered_df.sort_values(by=['full_date', '건물명', '시간'])
@@ -124,22 +130,39 @@ if not raw_df.empty:
             if st.button("📄 PDF 생성 및 준비"):
                 try:
                     pdf_data = create_pdf(filtered_df)
-                    st.download_button("📥 PDF 다운로드", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
+                    st.download_button(
+                        label="📥 PDF 다운로드",
+                        data=pdf_data,
+                        file_name=f"rental_{start_selected}.pdf",
+                        mime="application/pdf"
+                    )
                 except Exception as e:
-                    st.error(f"PDF 생성 중 오류: {e}")
+                    st.error(f"PDF 생성 오류: {e}")
 
         st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
+        
         for date in sorted(filtered_df['full_date'].unique()):
             day_df = filtered_df[filtered_df['full_date'] == date]
             st.markdown(f'<div class="date-header">📅 {date} ({day_df.iloc[0]["요일"]}요일)</div>', unsafe_allow_html=True)
+            
             for bu in selected_bu:
                 bu_df = day_df[day_df['건물명'] == bu]
                 if not bu_df.empty:
                     st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
-                    header_html = '<div class="table-container"><table><thead><tr><th style="width:15%;">장소</th><th style="width:15%;">시간</th><th style="width:40%;">행사명</th><th style="width:7%;">인원</th><th style="width:15%;">부서</th><th style="width:8%;">상태</th></tr></thead><tbody>'
-                    rows_html = "".join([f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
+                    
+                    header_html = """
+                    <div class="table-container"><table><thead><tr>
+                        <th style="width:15%;">장소</th><th style="width:15%;">시간</th><th style="width:40%;">행사명</th>
+                        <th style="width:7%;">인원</th><th style="width:15%;">부서</th><th style="width:8%;">상태</th>
+                    </tr></thead><tbody>"""
+                    
+                    rows_html = "".join([
+                        f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td>"
+                        f"<td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" 
+                        for _, r in bu_df.iterrows()
+                    ])
                     st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
     else:
-        st.info("선택한 건물에 내역이 없습니다.")
+        st.info("선택한 건물에 해당하는 내역이 없습니다.")
 else:
     st.info("조회된 내역이 없습니다.")
