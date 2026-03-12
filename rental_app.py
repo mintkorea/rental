@@ -3,8 +3,6 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-from fpdf import FPDF
-import os
 
 # 1. 페이지 및 기본 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
@@ -14,7 +12,7 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (표 디자인 및 열 너비 강제 고정)
+# 2. CSS 설정 (표 너비 및 줌 최적화)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -30,8 +28,8 @@ st.markdown("""
     
     /* 열 너비 강제 배분: 시간 열을 장소보다 좁게 설정 */
     .col-place { width: 120px; }
-    .col-time  { width: 85px; }   /* 시간을 좁게 고정 */
-    .col-event { width: auto; }   /* 행사명은 잔여 공간 전체 활용 */
+    .col-time  { width: 85px; }   /* 시간 필드를 슬림하게 고정 */
+    .col-event { width: auto; }   /* 행사명은 남는 공간 전체 활용 */
     .col-count { width: 45px; }
     .col-dept  { width: 110px; }
     .col-stat  { width: 50px; }
@@ -41,7 +39,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 필터링 (기존 로직 유지)
+# 3. 데이터 로드 및 요일 필터링 함수 (검증된 로직 유지)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -76,7 +74,7 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# 4. 메인 UI 및 출력
+# 4. 메인 UI
 st.sidebar.title("📅 대관 조회 설정")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=start_selected)
@@ -96,6 +94,7 @@ if not all_df.empty:
             if not bu_df.empty:
                 st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
                 
+                # HTML 테이블 생성
                 rows_html = ""
                 for _, r in bu_df.iterrows():
                     rows_html += f"""
