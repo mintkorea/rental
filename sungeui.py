@@ -11,7 +11,7 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"]
 
-# 2. CSS 설정 (웹 화면 가독성 및 모바일 대응)
+# 2. CSS 설정 (디자인 유지)
 st.markdown("""
 <style>
     .stApp { background-color: white; }
@@ -21,11 +21,10 @@ st.markdown("""
     table { width: 100%; border-collapse: collapse; min-width: 600px; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 6px; font-size: 11px; font-weight: bold; }
     td { border: 1px solid #eee; padding: 8px 6px; font-size: 12px; text-align: center; }
-    .no-data { color: #666; font-size: 11px; padding: 10px; border: 1px solid #eee; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 함수
+# 3. 데이터 로드 및 요일 필터링 함수
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -34,53 +33,62 @@ def get_data(s_date, e_date):
         res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         raw = res.json().get('res', [])
         rows = []
+        
         for item in raw:
             if not item.get('startDt'): continue
+            
+            # allowDay 처리: "1,2,3" 형태를 리스트로 변환 (1:월, 7:일 기준인 경우 많음)
+            # 시스템마다 기준이 다를 수 있으나 보통 파이썬 weekday()는 0:월 ~ 6:일임
+            # 여기서는 API의 allowDay 값을 숫자로 변환하여 비교합니다.
+            allowed_weekdays = []
+            if item.get('allowDay'):
+                allowed_weekdays = [int(d.strip()) for d in str(item['allowDay']).split(',') if d.strip()]
+
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            
             curr = s_dt
             while curr <= e_dt:
                 if s_date <= curr <= e_date:
-                    rows.append({
-                        '날짜': curr.strftime('%m-%d'),
-                        '건물명': str(item.get('buNm', '')).strip(),
-                        '장소': item.get('placeNm', ''), 
-                        '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                        '행사명': item.get('eventNm', ''), 
-                        '인원': item.get('peopleCount', ''),
-                        '부서': item.get('mgDeptNm', ''),
-                        '상태': '확정' if item.get('status') == 'Y' else '대기'
-                    })
+                    # 요일 체크 (파이썬 weekday() 0=월, 1=화... 이므로 API 기준인 1=월에 맞춤)
+                    curr_weekday = curr.weekday() + 1 
+                    
+                    # allowDay가 비어있으면 매일, 있으면 해당 요일만 포함
+                    if not allowed_weekdays or curr_weekday in allowed_weekdays:
+                        rows.append({
+                            '날짜': curr.strftime('%m-%d'),
+                            'full_date': curr.strftime('%Y-%m-%d'),
+                            '건물명': str(item.get('buNm', '')).strip(),
+                            '장소': item.get('placeNm', ''), 
+                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
+                            '행사명': item.get('eventNm', ''), 
+                            '인원': item.get('peopleCount', ''),
+                            '부서': item.get('mgDeptNm', ''),
+                            '상태': '확정' if item.get('status') == 'Y' else '대기'
+                        })
                 curr += timedelta(days=1)
+        
         df = pd.DataFrame(rows)
         if not df.empty:
             df['건물명'] = pd.Categorical(df['건물명'], categories=BUILDING_ORDER, ordered=True)
-            return df.sort_values(by=['날짜', '건물명', '시간'])
+            return df.sort_values(by=['full_date', '건물명', '시간'])
         return df
     except: return pd.DataFrame()
 
-# 4. 건물별로 독립된 표를 PDF에 그리는 함수
-def create_building_split_pdf(df, title_text, selected_buildings):
+# 4. 건물별 PDF 생성 함수 (요일 반영된 DF 사용)
+def create_split_pdf(df, title_text, selected_buildings):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     pdf.add_font("Nanum", "", "NanumGothic.ttf", uni=True)
     pdf.add_page()
-    
-    # 1) 메인 제목
     pdf.set_font("Nanum", size=16)
     pdf.cell(0, 15, title_text, ln=True, align='C')
     pdf.ln(5)
 
-    # 2) 건물별 루프 실행
     for bu in selected_buildings:
         bu_df = df[df['건물명'] == bu]
-        
-        # 건물명 소제목
         pdf.set_font("Nanum", size=12)
-        pdf.set_text_color(46, 80, 119) # 짙은 파란색 포인트
         pdf.cell(0, 10, f"■ {bu}", ln=True, align='L')
-        pdf.set_text_color(0, 0, 0) # 기본 검정색 복구
         
-        # 표 헤더
         cols = [("장소", 40), ("시간", 35), ("행사명", 115), ("인원", 12), ("부서", 50), ("상태", 15)]
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font("Nanum", size=10)
@@ -88,7 +96,6 @@ def create_building_split_pdf(df, title_text, selected_buildings):
             pdf.cell(width, 9, txt, border=1, align='C', fill=True)
         pdf.ln()
 
-        # 표 내용
         pdf.set_font("Nanum", size=9)
         if not bu_df.empty:
             for _, row in bu_df.iterrows():
@@ -102,39 +109,29 @@ def create_building_split_pdf(df, title_text, selected_buildings):
         else:
             pdf.cell(267, 9, "대관 내역이 없습니다.", border=1, align='C')
             pdf.ln()
-        
-        pdf.ln(12) # 건물 표 사이 간격
-
-    # ⚠️ AttributeError 해결: output() 결과를 바이트로 직접 변환
+        pdf.ln(10)
     return bytes(pdf.output())
 
-# 5. 메인 UI 구성
-st.sidebar.title("📅 조회 설정")
-start_selected = st.sidebar.date_input("조회 시작일", value=now_today)
-end_selected = st.sidebar.date_input("조회 종료일", value=now_today)
+# 5. 메인 UI
+st.sidebar.title("📅 대관 조회 설정")
+start_selected = st.sidebar.date_input("시작일", value=now_today)
+end_selected = st.sidebar.date_input("종료일", value=now_today)
 selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
 all_df = get_data(start_selected, end_selected)
-display_title = f"성의교정 대관 현황 ({start_selected})" if start_selected == end_selected else f"성의교정 대관 현황 ({start_selected} ~ {end_selected})"
+display_title = f"성의교정 대관 현황 ({start_selected} ~ {end_selected})" if start_selected != end_selected else f"성의교정 대관 현황 ({start_selected})"
 
-# 🚀 즉시 다운로드 버튼 배치 (생성 단계 생략)
+# 🚀 PDF 즉시 다운로드 (AttributeError 해결 방식)
 if not all_df.empty:
     try:
-        pdf_bytes = create_building_split_pdf(all_df, display_title, selected_bu)
-        st.sidebar.download_button(
-            label="📥 PDF 즉시 저장",
-            data=pdf_bytes,
-            file_name=f"rental_{start_selected}.pdf",
-            mime="application/pdf"
-        )
+        pdf_data = create_split_pdf(all_df, display_title, selected_bu)
+        st.sidebar.download_button(label="📥 PDF 즉시 저장", data=pdf_data, file_name=f"rental_{start_selected}.pdf", mime="application/pdf")
     except Exception as e:
-        st.sidebar.error(f"PDF 처리 중 오류: {str(e)}")
+        st.sidebar.error(f"PDF 생성 오류: {e}")
 else:
     st.sidebar.info("조회된 내역이 없습니다.")
 
-# 6. 웹 화면 출력 (사용자 피드백 반영 디자인)
 st.markdown(f'<div class="main-title">🏫 {display_title}</div>', unsafe_allow_html=True)
-
 if not all_df.empty:
     for bu in selected_bu:
         bu_df = all_df[all_df['건물명'] == bu]
@@ -143,6 +140,6 @@ if not all_df.empty:
             rows_html = "".join([f"<tr><td>{r['날짜']}</td><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
             st.markdown(f'<div class="table-container"><table><thead><tr><th>날짜</th><th>장소</th><th>시간</th><th>행사명</th><th>인원</th><th>부서</th><th>상태</th></tr></thead><tbody>{rows_html}</tbody></table></div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="no-data">해당 건물에 조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+            st.info("해당 건물에 조회된 내역이 없습니다.")
 else:
-    st.info("조회된 기간에 전체 대관 내역이 없습니다.")
+    st.info("조회된 내역이 없습니다.")
