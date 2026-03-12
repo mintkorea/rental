@@ -95,3 +95,4 @@ if not df.empty:
         st.info("선택한 건물의 대관 내역이 없습니다.")
 else:
     st.warning("해당 날짜에 조회된 데이터가 없습니다.")
+
