@@ -22,26 +22,26 @@ st.markdown("""
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 10px 0; margin-top: 30px; border-bottom: 2px solid #eee; }
     .building-header { font-size: 15px !important; font-weight: 700; margin-top: 15px; margin-bottom: 5px; border-left: 5px solid #2E5077; padding-left: 10px; }
     
-    /* 표 레이아웃 수정 */
+    /* 표 레이아웃: 가로 줌 조작 시 글자가 뭉치지 않게 고정 */
     .table-container { width: 100%; overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; min-width: 750px; table-layout: fixed; margin-bottom: 15px; }
+    table { width: 100%; border-collapse: collapse; min-width: 800px; table-layout: fixed; margin-bottom: 15px; }
     th, td { border: 1px solid #ddd; padding: 10px 4px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-all; }
     th { background-color: #f8f9fa; font-weight: bold; color: #333; }
     
-    /* 열 너비 강제 고정 (시간 필드를 슬림하게) */
-    .col-place { width: 110px; }
-    .col-time  { width: 85px; }   /* 장소보다 좁게 설정 */
-    .col-event { width: auto; }   /* 행사명은 남는 공간을 다 차지 */
+    /* 열 너비 강제 배분: 시간 열을 장소보다 좁게 설정 */
+    .col-place { width: 120px; }
+    .col-time  { width: 85px; }   /* 시간을 좁게 고정 */
+    .col-event { width: auto; }   /* 행사명은 잔여 공간 전체 활용 */
     .col-count { width: 45px; }
     .col-dept  { width: 110px; }
     .col-stat  { width: 50px; }
 
-    /* 행사명 왼쪽 정렬 및 가독성 */
-    .event-text { text-align: left !important; padding-left: 8px !important; line-height: 1.4; }
+    /* 행사명은 가독성을 위해 왼쪽 정렬 */
+    .event-text { text-align: left !important; padding-left: 10px !important; line-height: 1.4; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 함수 (기본 유지)
+# 3. 데이터 로드 및 필터링 (기존 로직 유지)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -76,25 +76,13 @@ def get_data(s_date, e_date):
         return df
     except: return pd.DataFrame()
 
-# (PDF 생성 함수는 동일하므로 생략 가능하나 유지를 위해 포함)
-def create_split_pdf(df, selected_buildings):
-    pdf = FPDF(orientation='L', unit='mm', format='A4')
-    # ... (PDF 로직 동일)
-    return bytes(pdf.output())
-
-# 5. 메인 UI 및 화면 출력
+# 4. 메인 UI 및 출력
 st.sidebar.title("📅 대관 조회 설정")
 start_selected = st.sidebar.date_input("시작일", value=now_today)
 end_selected = st.sidebar.date_input("종료일", value=start_selected)
 selected_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
 
 all_df = get_data(start_selected, end_selected)
-
-# PDF 관련 로직 (기본 유지)
-if not all_df.empty:
-    with st.sidebar:
-        # PDF 버튼 생성 로직 (생략 - 기존 코드 유지)
-        pass
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
@@ -108,8 +96,20 @@ if not all_df.empty:
             if not bu_df.empty:
                 st.markdown(f'<div class="building-header">🏢 {bu}</div>', unsafe_allow_html=True)
                 
-                # 수정된 표 구조 (클래스 부여로 너비 조절)
-                table_html = f"""
+                rows_html = ""
+                for _, r in bu_df.iterrows():
+                    rows_html += f"""
+                    <tr>
+                        <td>{r['장소']}</td>
+                        <td>{r['시간']}</td>
+                        <td class="event-text">{r['행사명']}</td>
+                        <td>{r['인원']}</td>
+                        <td>{r['부서']}</td>
+                        <td>{r['상태']}</td>
+                    </tr>
+                    """
+                
+                st.markdown(f"""
                 <div class="table-container">
                     <table>
                         <thead>
@@ -123,19 +123,10 @@ if not all_df.empty:
                             </tr>
                         </thead>
                         <tbody>
-                """
-                for _, r in bu_df.iterrows():
-                    table_html += f"""
-                        <tr>
-                            <td>{r['장소']}</td>
-                            <td>{r['시간']}</td>
-                            <td class="event-text">{r['행사명']}</td>
-                            <td>{r['인원']}</td>
-                            <td>{r['부서']}</td>
-                            <td>{r['상태']}</td>
-                        </tr>
-                    """
-                table_html += "</tbody></table></div>"
-                st.markdown(table_html, unsafe_allow_html=True)
+                            {rows_html}
+                        </tbody>
+                    </table>
+                </div>
+                """, unsafe_allow_html=True)
 else:
     st.info("조회된 내역이 없습니다.")
