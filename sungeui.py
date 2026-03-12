@@ -6,13 +6,10 @@ from datetime import datetime, timedelta
 import pytz
 from fpdf import FPDF
 
-# 페이지 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
-# CSS (모바일 스크롤 지원)
 st.markdown("""
 <style>
-
 .main-title{
 font-size:22px;
 font-weight:800;
@@ -55,6 +52,7 @@ background:#f5f5f5;
 padding:8px;
 border:1px solid #ddd;
 font-size:13px;
+text-align:center;
 }
 
 td{
@@ -62,12 +60,12 @@ padding:8px;
 border:1px solid #eee;
 font-size:13px;
 white-space:nowrap;
+text-align:center;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# 기본 설정
 KST = pytz.timezone('Asia/Seoul')
 today = datetime.now(KST).date()
 
@@ -83,7 +81,6 @@ BUILDING_ORDER = [
 
 DEFAULT_BUILDINGS = ["성의회관","의생명산업연구원"]
 
-# 데이터 로드
 @st.cache_data(ttl=60)
 def get_data(start,end):
 
@@ -96,8 +93,11 @@ def get_data(start,end):
     }
 
     try:
-
         res=requests.get(url,params=params,timeout=10)
+
+        if res.status_code != 200:
+            return pd.DataFrame()
+
         raw=res.json().get("res",[])
 
         rows=[]
@@ -117,7 +117,6 @@ def get_data(start,end):
                 if start<=d<=end:
 
                     rows.append({
-
                     "날짜":d.strftime("%Y-%m-%d"),
                     "요일":['월','화','수','목','금','토','일'][d.weekday()],
                     "건물":item.get("buNm",""),
@@ -127,7 +126,6 @@ def get_data(start,end):
                     "인원":item.get("peopleCount",""),
                     "부서":item.get("mgDeptNm",""),
                     "상태":"확정" if item.get("status")=="Y" else "대기"
-
                     })
 
                 d+=timedelta(days=1)
@@ -135,7 +133,6 @@ def get_data(start,end):
         df=pd.DataFrame(rows)
 
         if not df.empty:
-
             df["건물"]=pd.Categorical(df["건물"],categories=BUILDING_ORDER,ordered=True)
             df=df.sort_values(["날짜","건물","시간"])
 
@@ -144,8 +141,6 @@ def get_data(start,end):
     except:
         return pd.DataFrame()
 
-
-# PDF 생성
 def create_pdf(df):
 
     pdf=FPDF("L","mm","A4")
@@ -174,7 +169,7 @@ def create_pdf(df):
             pdf.set_font("Arial","B",12)
             pdf.cell(0,8,bu,0,1)
 
-            headers=["장소","시간","행사","인원","부서","상태"]
+            headers=["Place","Time","Event","People","Dept","Status"]
             widths=[40,35,120,20,60,20]
 
             pdf.set_font("Arial","B",10)
@@ -190,7 +185,7 @@ def create_pdf(df):
 
                 pdf.cell(40,8,str(r["장소"])[:20],1)
                 pdf.cell(35,8,str(r["시간"]),1)
-                pdf.cell(120,8,str(r["행사"])[:50],1)
+                pdf.cell(120,8=str(r["행사"])[:50],border=1)
                 pdf.cell(20,8,str(r["인원"]),1)
                 pdf.cell(60,8,str(r["부서"])[:25],1)
                 pdf.cell(20,8,str(r["상태"]),1)
@@ -201,8 +196,6 @@ def create_pdf(df):
 
     return pdf.output(dest="S").encode("latin1")
 
-
-# 사이드바
 st.sidebar.title("조회 설정")
 
 start=st.sidebar.date_input("시작일",today)
@@ -216,7 +209,6 @@ default=DEFAULT_BUILDINGS
 
 df=get_data(start,end)
 
-# PDF 다운로드
 if not df.empty:
 
     pdf=create_pdf(df)
@@ -228,10 +220,8 @@ if not df.empty:
     mime="application/pdf"
     )
 
-# 제목
 st.markdown('<div class="main-title">성의교정 대관 현황</div>',unsafe_allow_html=True)
 
-# 출력
 if not df.empty:
 
     for date in sorted(df["날짜"].unique()):
@@ -274,7 +264,7 @@ if not df.empty:
                 <tr>
                 <td>{r['장소']}</td>
                 <td>{r['시간']}</td>
-                <td>{r['행사']}</td>
+                <td style="text-align:left">{r['행사']}</td>
                 <td>{r['인원']}</td>
                 <td>{r['부서']}</td>
                 <td>{r['상태']}</td>
@@ -286,6 +276,5 @@ if not df.empty:
             st.markdown(html,unsafe_allow_html=True)
 
 else:
-
     st.info("조회 결과가 없습니다.")
 ```
