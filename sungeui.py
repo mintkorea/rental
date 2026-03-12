@@ -12,7 +12,7 @@ now_today = datetime.now(KST).date()
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. 엑셀 자동화 (모든 데이터 포함 및 서식 적용)
+# 2. 엑셀 자동화 (전체 항목 포함)
 def create_excel_automated(df):
     if df.empty: return None
     output = io.BytesIO()
@@ -23,12 +23,11 @@ def create_excel_automated(df):
         cell_fmt = workbook.add_format({'font_size':11, 'border':1, 'align':'center'})
         wrap_fmt = workbook.add_format({'font_size':11, 'border':1, 'align':'left', 'text_wrap':True})
         worksheet.set_default_row(28)
-        widths = [13, 6, 15, 18, 15, 40, 7, 18, 10]
-        for i, width in enumerate(widths):
-            worksheet.set_column(i, i, width, wrap_fmt if i == 5 else cell_fmt)
+        for i in range(len(df.columns)):
+            worksheet.set_column(i, i, 15, cell_fmt)
     return output.getvalue()
 
-# 3. 데이터 수집 (기간 대관 완벽 대응)
+# 3. 데이터 수집 (allowDay 필터링 핵심)
 @st.cache_data(ttl=60)
 def get_data(target_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -41,16 +40,30 @@ def get_data(target_date):
         res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         raw = res.json().get('res', [])
         rows = []
+        
+        # 현재 조회일의 요일 인덱스 (월=1, 화=2, ..., 일=7) - 서버 allowDay 기준에 맞춤
+        target_weekday = target_date.isoweekday() 
+
         for item in raw:
             s_dt = (item.get('startDt') or item.get('start')).split('T')[0]
             e_dt = (item.get('endDt') or item.get('end') or s_dt).split('T')[0]
             s_obj = datetime.strptime(s_dt, '%Y-%m-%d').date()
             e_obj = datetime.strptime(e_dt, '%Y-%m-%d').date()
             
+            # 날짜 범위 체크
             if s_obj <= target_date <= e_obj:
+                # [핵심] allowDay 체크
+                # 기간 대관인데 allowDay 정보가 있다면, 오늘 요일이 포함되어 있는지 확인
+                allow_days = str(item.get('allowDay', '')) # 예: "1,3,5" 혹은 "1"
+                
+                if allow_days and allow_days != 'None':
+                    # 오늘 요일(숫자)이 allow_days 문자열 안에 있는지 확인
+                    if str(target_weekday) not in allow_days:
+                        continue # 요일이 맞지 않으면 건너뜀
+
                 rows.append({
                     '날짜': target_date.isoformat(),
-                    '요일': ['월','화','수','목','금','토','일'][target_date.weekday()],
+                    '요일': ['','월','화','수','목','금','토','일'][target_weekday],
                     '건물명': str(item.get('buNm', '')).strip(),
                     '장소': item.get('placeNm', '') or '-',
                     '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
@@ -60,6 +73,7 @@ def get_data(target_date):
                     '상태': '확정' if item.get('status') == 'Y' else '대기',
                     '_tm': item.get('startTime', '00:00')
                 })
+        
         if not rows: return pd.DataFrame()
         df = pd.DataFrame(rows)
         df['b_idx'] = df['건물명'].apply(lambda x: BUILDING_ORDER.index(x) if x in BUILDING_ORDER else 99)
@@ -67,13 +81,13 @@ def get_data(target_date):
     except: return pd.DataFrame()
 
 # 4. 화면 구성
-st.sidebar.title("📅 대관 설정")
+st.sidebar.title("📅 대관 조회")
 date_in = st.sidebar.date_input("날짜 선택", value=now_today)
 sel_bu = st.sidebar.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
 df = get_data(date_in)
 
-st.markdown(f"### 🗓️ {date_in} 대관 리스트")
+st.markdown(f"### 🗓️ {date_in} 대관 현황")
 
 if not df.empty:
     f_df = df[df['건물명'].isin(sel_bu)]
@@ -89,10 +103,10 @@ if not df.empty:
             b_data = f_df[f_df['건물명'] == b_name]
             
             if not b_data.empty:
-                # [요청반영] 장소 - 시간 - 행사명 순서로 재배치
-                display_cols = ['장소', '시간', '행사명', '인원', '상태', '부서']
+                # 순서 고정: 장소 -> 시간 -> 행사명
+                display_cols = ['장소', '시간', '행사명', '인원', '상태']
                 st.dataframe(b_data[display_cols], use_container_width=True, hide_index=True)
             else:
                 st.info(f"해당 일자에 {b_name} 대관 내역이 없습니다.")
 else:
-    st.warning("⚠️ 조회된 데이터가 없습니다.")
+    st.warning("조회된 데이터가 없습니다.")
