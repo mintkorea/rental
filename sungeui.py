@@ -4,51 +4,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
-# 1. 페이지 설정
+# 1. 페이지 및 기본 설정
 st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
-DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (인쇄 시 높이 제한 완전 해제 및 스크롤 제거)
-st.markdown("""
-<style>
-    /* 웹 화면 가독성 */
-    table { width: 100% !important; border-collapse: collapse; table-layout: fixed; border: 1px solid #dee2e6; margin-bottom: 30px; }
-    th { background-color: #f8f9fa !important; font-weight: 800; text-align: center !important; height: 38px; border: 1px solid #dee2e6 !important; font-size: 14px; }
-    td { border: 1px solid #dee2e6; padding: 10px 4px !important; text-align: center; vertical-align: middle; font-size: 13px; line-height: 1.4; }
-    .date-header { font-size: 16px; font-weight: bold; background-color: #f0f2f6; padding: 10px; border-left: 5px solid #2e5077; margin-top: 30px; }
-    .bu-header { font-size: 15px; font-weight: bold; margin: 15px 0 5px 0; padding-left: 8px; border-left: 3px solid #2e5077; }
-    .left { text-align: left !important; padding-left: 10px !important; }
-
-    /* [핵심] 인쇄 시 1페이지만 나오는 문제 해결 전용 설정 */
-    @media print {
-        /* 모든 부모 컨테이너의 스크롤 및 높이 제한 해제 */
-        html, body, [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .main, .block-container, [data-testid="stVerticalBlock"] {
-            display: block !important;
-            height: auto !important;
-            overflow: visible !important;
-            position: static !important;
-        }
-
-        /* 인쇄 시 제외 요소 */
-        [data-testid="stSidebar"], header, footer, .stButton { display: none !important; }
-
-        /* 테이블 끊김 방지 */
-        table { page-break-inside: auto !important; width: 100% !important; }
-        tr { page-break-inside: avoid !important; page-break-after: auto !important; }
-        thead { display: table-header-group !important; }
-
-        /* 인쇄 폰트 및 배경색 */
-        th, td { border: 1px solid #000 !important; color: black !important; font-size: 10pt !important; }
-        .date-header, .bu-header { background-color: #eee !important; -webkit-print-color-adjust: exact; border: 1px solid #000 !important; }
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# 3. 데이터 로드 로직 (기간 필터 포함)
+# 2. 데이터 수집 로직 (기존과 동일)
 @st.cache_data(ttl=60)
 def get_clean_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -66,7 +29,7 @@ def get_clean_data(s_date, e_date):
             while curr <= last:
                 def clean(t): return str(t).replace("<", "&lt;").replace(">", "&gt;").strip() if t else ""
                 rows.append({
-                    'full_date': curr.strftime('%Y-%m-%d'),
+                    '날짜': curr.strftime('%Y-%m-%d'),
                     '요일': ['월','화','수','목','금','토','일'][curr.weekday()],
                     '건물명': clean(item.get('buNm', '')),
                     '장소': clean(item.get('placeNm', '')),
@@ -80,29 +43,36 @@ def get_clean_data(s_date, e_date):
         return pd.DataFrame(rows).drop_duplicates()
     except: return pd.DataFrame()
 
-# 4. 사이드바
+# 3. 사이드바 구성
 with st.sidebar:
-    st.header("⚙️ 필터")
+    st.header("⚙️ 조회 및 저장")
     s_day = st.date_input("시작일", value=now_today)
     e_day = st.date_input("종료일", value=s_day + timedelta(days=2))
-    selected_bu = st.multiselect("건물", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
+    selected_bu = st.multiselect("건물", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+    
+    # 데이터 불러오기
+    df = get_clean_data(s_day, e_day)
+    
+    if not df.empty:
+        # [해결책] 엑셀이 불편하시다면 HTML로 추출하여 PDF 저장을 돕는 기능
+        st.markdown("---")
+        st.subheader("📄 결과물 저장")
+        
+        # 필터링된 데이터
+        final_df = df[df['건물명'].isin(selected_bu)].sort_values(['날짜', '건물명'])
+        
+        # 엑셀(CSV) 다운로드 버튼 (UTF-8-SIG로 한글 깨짐 방지)
+        csv_data = final_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 엑셀(CSV) 다운로드", data=csv_data, file_name=f"대관현황_{s_day}.csv", mime="text/csv")
+        
+        st.info("💡 엑셀을 열고 상단의 **[편집 사용]**을 누르면 자유롭게 수정하실 수 있습니다.")
 
-# 5. 메인 출력
-df = get_clean_data(s_day, e_day)
-st.markdown('<h1 style="text-align:center; font-size:22px;">🏫 성의교정 대관 현황</h1>', unsafe_allow_html=True)
+# 4. 메인 화면 출력 (웹 확인용)
+st.markdown(f'<h2 style="text-align:center;">🏫 {s_day} ~ {e_day} 대관 현황</h2>', unsafe_allow_html=True)
 
 if not df.empty:
-    f_df = df[df['건물명'].isin(selected_bu)]
-    for d in sorted(f_df['full_date'].unique()):
-        day_df = f_df[f_df['full_date'] == d]
-        st.markdown(f'<div class="date-header">📅 {d} ({day_df.iloc[0]["요일"]})</div>', unsafe_allow_html=True)
-        for bu in BUILDING_ORDER:
-            if bu in selected_bu:
-                bu_df = day_df[day_df['건물명'] == bu]
-                if not bu_df.empty:
-                    st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
-                    table_html = f"<table><thead><tr><th style='width:16%;'>장소</th><th style='width:13%;'>시간</th><th style='width:41%;'>행사명</th><th style='width:7%;'>인원</th><th style='width:16%;'>부서</th><th style='width:7%;'>상태</th></tr></thead><tbody>"
-                    for _, r in bu_df.iterrows():
-                        table_html += f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td class='left'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>"
-                    table_html += "</tbody></table>"
-                    st.markdown(table_html, unsafe_allow_html=True)
+    f_df = df[df['건물명'].isin(selected_bu)].sort_values(['날짜', '건물명'])
+    # 웹 화면에는 보기 좋게 표로 출력
+    st.table(f_df) 
+else:
+    st.info("조회된 내역이 없습니다.")
