@@ -12,53 +12,58 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (헤더 중앙 정렬 및 PDF 출력 최적화)
+# 2. CSS 설정 (PDF 인쇄 시 전체 내용 노출 및 헤더 정렬)
 st.markdown("""
 <style>
-    /* [수정] 셸 헤더 중앙 정렬 및 테이블 스타일 */
-    table { width: 100% !important; border-collapse: collapse; table-layout: fixed; border: 1px solid #dee2e6; }
-    
+    /* 웹 화면 스타일 */
+    table { width: 100% !important; border-collapse: collapse; table-layout: fixed; border: 1px solid #dee2e6; margin-bottom: 20px; }
     th { 
-        background-color: #f8f9fa !important; 
-        font-weight: 800 !important; 
-        height: 38px; 
-        font-size: clamp(10px, 1.2vw, 14px) !important;
-        text-align: center !important; /* [핵심] 헤더 중앙 정렬 */
-        vertical-align: middle !important;
-        border: 1px solid #dee2e6 !important;
+        background-color: #f8f9fa !important; font-weight: 800 !important; height: 38px; 
+        font-size: clamp(10px, 1.2vw, 14px) !important; text-align: center !important; 
+        vertical-align: middle !important; border: 1px solid #dee2e6 !important; 
     }
-    
     td { 
-        border: 1px solid #dee2e6; 
-        padding: 10px 4px !important; 
-        font-size: clamp(9.5px, 1.1vw, 13px) !important;
-        line-height: 1.4; 
-        word-break: break-all; 
-        text-align: center; 
-        vertical-align: middle; 
+        border: 1px solid #dee2e6; padding: 10px 4px !important; 
+        font-size: clamp(9.5px, 1.1vw, 13px) !important; line-height: 1.4; 
+        word-break: break-all; text-align: center; vertical-align: middle; 
     }
-    
     .date-header { font-size: clamp(12px, 1.5vw, 16px) !important; font-weight: bold; background-color: #f0f2f6; padding: 10px; border-left: 5px solid #2e5077; margin-top: 25px; }
     .bu-header { font-size: clamp(11px, 1.3vw, 15px) !important; font-weight: bold; margin: 15px 0 5px 0; padding-left: 8px; border-left: 3px solid #2e5077; }
     .left { text-align: left !important; padding-left: 10px !important; }
 
-    /* [추가] PDF 및 브라우저 인쇄 최적화 설정 */
+    /* [핵심] PDF 및 인쇄 시 1페이지만 나오는 현상 방지 설정 */
     @media print {
-        @page { size: A4 landscape; margin: 1cm; }
-        /* 사이드바, 버튼, 헤더 등 인쇄 제외 요소 */
-        [data-testid="stSidebar"], .stButton, header, footer, .no-print { display: none !important; }
-        [data-testid="stAppViewContainer"] { padding: 0 !important; }
+        /* 1. 스트림릿 기본 레이아웃 제한 해제 */
+        [data-testid="stAppViewContainer"], [data-testid="stMainViewContainer"], .main, .block-container {
+            display: block !important;
+            overflow: visible !important;
+            height: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
         
-        /* 인쇄 시 폰트 및 배경색 강제 적용 */
-        table { font-size: 10pt !important; width: 100% !important; border: 1px solid #000 !important; }
-        th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; color: black !important; border: 1px solid #000 !important; }
-        td { padding: 6px 4px !important; border: 1px solid #000 !important; color: black !important; }
-        .date-header, .bu-header { background-color: #e9ecef !important; -webkit-print-color-adjust: exact; border: 1px solid #ccc !important; padding: 5px !important; margin-top: 10px !important; }
+        /* 2. 사이드바 및 불필요한 요소 숨기기 */
+        [data-testid="stSidebar"], header, footer, .stButton, .no-print { 
+            display: none !important; 
+        }
+
+        /* 3. 테이블 페이지 끊김 방지 */
+        table { 
+            page-break-inside: auto !important; 
+            width: 100% !important; 
+            border: 1px solid #000 !important;
+        }
+        tr { page-break-inside: avoid !important; page-break-after: auto !important; }
+        thead { display: table-header-group !important; } /* 페이지마다 헤더 반복 */
+        
+        /* 4. 인쇄 전용 가독성 설정 */
+        th, td { border: 1px solid #000 !important; color: black !important; font-size: 10pt !important; padding: 6px 4px !important; }
+        .date-header, .bu-header { background-color: #e9ecef !important; -webkit-print-color-adjust: exact; border: 1px solid #000 !important; margin-top: 15px !important; }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 기간 필터 (동일 유지)
+# 3. 데이터 로드 및 필터 로직
 @st.cache_data(ttl=60)
 def get_clean_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -94,16 +99,16 @@ def get_clean_data(s_date, e_date):
 
 # 4. 사이드바
 with st.sidebar:
-    st.title("🔎 대관 조회")
-    s_day = st.date_input("조회 시작일", value=now_today)
-    e_day = st.date_input("조회 종료일", value=s_day + timedelta(days=2))
-    selected_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
+    st.title("🔎 조회 필터")
+    s_day = st.date_input("시작일", value=now_today)
+    e_day = st.date_input("종료일", value=s_day + timedelta(days=2))
+    selected_bu = st.multiselect("건물", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
     st.markdown("---")
-    st.warning("⚠️ **PDF 저장 안내**\n\n브라우저 우측 상단 메뉴에서 **인쇄(Print)**를 누른 후, 대상을 **'PDF로 저장'**으로 선택해 주세요.")
+    st.info("💡 **전체 내용 인쇄 방법**\n\n1. `Ctrl + P`를 누릅니다.\n2. 설정에서 **'배경 그래픽'**을 체크하세요.\n3. 대상에서 **'PDF로 저장'**을 선택하면 모든 페이지가 저장됩니다.")
 
 # 5. 메인 출력
 df = get_clean_data(s_day, e_day)
-st.markdown('<h1 style="text-align:center; font-size:24px;">🏫 성의교정 대관 현황</h1>', unsafe_allow_html=True)
+st.markdown('<h1 style="text-align:center; font-size:22px;">🏫 성의교정 대관 현황</h1>', unsafe_allow_html=True)
 
 if not df.empty:
     f_df = df[df['건물명'].isin(selected_bu)]
@@ -125,4 +130,4 @@ if not df.empty:
                     table_html += "</tbody></table>"
                     st.markdown(table_html, unsafe_allow_html=True)
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.info("내역이 없습니다.")
