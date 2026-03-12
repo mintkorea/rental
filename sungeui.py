@@ -14,19 +14,17 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (웹 화면 가독성 및 개행 최적화)
+# 2. CSS 설정
 st.markdown("""
 <style>
     .stApp { background-color: white; }
     .main-title { font-size: 22px !important; font-weight: 800; text-align: center; margin-bottom: 20px; color: #1E3A5F; }
     .date-header { font-size: 18px !important; font-weight: 800; color: #1E3A5F; padding: 12px 0; margin-top: 35px; border-bottom: 2px solid #2E5077; }
     .building-header { font-size: 15px !important; font-weight: 700; margin-top: 20px; margin-bottom: 8px; border-left: 5px solid #2E5077; padding-left: 10px; color: #333; }
-    
     .table-container { width: 100%; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; border: 1px solid #dee2e6; }
     th { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 12px 4px; font-size: 13px; font-weight: bold; text-align: center; color: #495057; }
     td { border: 1px solid #eee; padding: 12px 8px; font-size: 13px; text-align: center; vertical-align: middle; word-break: break-word; overflow-wrap: break-word; }
-    tr:hover { background-color: #fdfdfd; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,7 +42,6 @@ def get_data(s_date, e_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = []
             if allow_day_raw and allow_day_raw.lower() != 'none':
@@ -70,7 +67,7 @@ def get_data(s_date, e_date):
     except:
         return pd.DataFrame()
 
-# 4. PDF 생성 함수 (자동 줄바꿈 및 동적 높이 조절 적용)
+# 4. PDF 생성 함수 (중복 출력 방지 로직 적용)
 def create_pdf(df):
     pdf = FPDF(orientation='L', unit='mm', format='A4')
     font_path = "NanumGothic.ttf"
@@ -93,57 +90,46 @@ def create_pdf(df):
             pdf.set_font("Nanum", size=12) if os.path.exists(font_path) else pdf.set_font("Arial", 'B', 12)
             pdf.cell(0, 10, f"■ {bu}", ln=True)
             
-            # 헤더
             pdf.set_text_color(0)
             pdf.set_fill_color(240, 240, 240)
-            # 총 가로 길이 275mm (A4 가로 297mm - 마진)
             cols = [("장소", 35), ("시간", 35), ("행사명", 125), ("인원", 15), ("부서", 50), ("상태", 15)]
             for txt, width in cols:
                 pdf.cell(width, 10, txt, border=1, align='C', fill=True)
             pdf.ln()
             
-            # 데이터 (MultiCell 개행 로직)
             pdf.set_font("Nanum", size=9) if os.path.exists(font_path) else pdf.set_font("Arial", size=9)
             for _, row in bu_df.iterrows():
-                line_height = 8 # 기본 한 줄 높이
+                # 행의 최대 높이 계산을 위한 임시 측정
+                line_height = 7
+                event_txt = str(row['행사명'])
                 
-                # 셀 내용 준비
-                col_data = [
-                    (35, str(row['장소'])),
-                    (35, str(row['시간'])),
-                    (125, " " + str(row['행사명'])),
-                    (15, str(row['인원'])),
-                    (50, str(row['부서'])),
-                    (15, str(row['상태']))
-                ]
+                # 텍스트 길이에 따른 높이 측정 (실제 출력 X)
+                current_x = pdf.get_x()
+                current_y = pdf.get_y()
                 
-                # 현재 위치 저장
-                start_x = pdf.get_x()
-                start_y = pdf.get_y()
-                max_y = start_y
+                # 가상 출력으로 높이만 계산
+                pdf.multi_cell(125, line_height, event_txt, border=0, align='L')
+                end_y = pdf.get_y()
+                row_height = max(10, end_y - current_y) # 최소 높이 10mm 보장
                 
-                # 1단계: 이 행에서 가장 높은 셀의 높이 찾기
-                for width, text in col_data:
-                    pdf.multi_cell(width, line_height, text, border=0, align='C' if width < 100 else 'L')
-                    if pdf.get_y() > max_y:
-                        max_y = pdf.get_y()
-                    pdf.set_xy(pdf.get_x() + width, start_y)
+                # 실제 출력 위치로 복귀
+                pdf.set_xy(current_x, current_y)
                 
-                row_height = max_y - start_y
+                # 각 셀 출력 (높이 통일)
+                pdf.cell(35, row_height, str(row['장소']), border=1, align='C')
+                pdf.cell(35, row_height, str(row['시간']), border=1, align='C')
                 
-                # 2단계: 결정된 높이로 테두리 그리기 및 텍스트 실제 출력
-                pdf.set_xy(start_x, start_y)
-                for width, text in col_data:
-                    current_x = pdf.get_x()
-                    # 테두리 상자 먼저 그리기
-                    pdf.rect(current_x, start_y, width, row_height)
-                    # 텍스트 출력
-                    pdf.multi_cell(width, line_height, text, border=0, align='C' if width < 100 else 'L')
-                    pdf.set_xy(current_x + width, start_y)
+                # 행사명 (MultiCell은 좌표를 깨뜨리므로 위치 강제 지정)
+                cell_x, cell_y = pdf.get_x(), pdf.get_y()
+                pdf.rect(cell_x, cell_y, 125, row_height) # 테두리 먼저
+                pdf.multi_cell(125, line_height, event_txt, border=0, align='L')
                 
-                pdf.set_y(start_y + row_height)
+                pdf.set_xy(cell_x + 125, cell_y)
+                pdf.cell(15, row_height, str(row['인원']), border=1, align='C')
+                pdf.cell(50, row_height, str(row['부서']), border=1, align='C')
+                pdf.cell(15, row_height, str(row['상태']), border=1, align='C')
+                pdf.ln(row_height) # 다음 행으로 이동
             pdf.ln(5)
-            
     return bytes(pdf.output(dest='S'))
 
 # 5. 메인 UI
@@ -161,6 +147,7 @@ if not raw_df.empty:
 
     if not filtered_df.empty:
         with st.sidebar:
+            # None 표시 방지를 위해 버튼 클릭 시에만 PDF 처리
             if st.button("📄 PDF 생성 및 준비"):
                 try:
                     pdf_data = create_pdf(filtered_df)
@@ -180,6 +167,6 @@ if not raw_df.empty:
                     rows_html = "".join([f"<tr><td>{r['장소']}</td><td>{r['시간']}</td><td style='text-align:left;'>{r['행사명']}</td><td>{r['인원']}</td><td>{r['부서']}</td><td>{r['상태']}</td></tr>" for _, r in bu_df.iterrows()])
                     st.markdown(header_html + rows_html + "</tbody></table></div>", unsafe_allow_html=True)
     else:
-        st.info("선택한 건물에 해당하는 내역이 없습니다.")
+        st.info("선택한 건물에 내역이 없습니다.")
 else:
     st.info("조회된 내역이 없습니다.")
