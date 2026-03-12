@@ -12,38 +12,37 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
 
-# 2. CSS 설정 (시간 여백 확보 및 자연스러운 줌/스크롤)
+# 2. CSS 설정 (줌 최적화 및 표 폭 밸런스 조정)
 st.markdown("""
 <style>
-    /* 브라우저 기본 스크롤과 줌이 표 전체에 적용되도록 설정 */
-    html, body { min-width: 100%; overflow-x: visible !important; }
+    /* 브라우저 자체 줌과 스크롤이 표 전체를 감싸도록 설정 */
+    html, body { min-width: 100%; overflow-x: auto !important; }
     
     .main-title { font-size: 14px !important; font-weight: 800; text-align: center; margin-bottom: 5px; }
     .date-header { font-size: 11px !important; font-weight: bold; background-color: #f0f2f6; padding: 3px 6px; border-left: 3px solid #2e5077; margin-top: 10px; }
     .bu-header { font-size: 10px !important; font-weight: bold; margin: 5px 0 2px 0; border-left: 2px solid #2e5077; padding-left: 5px; }
     
-    /* 테이블 컨테이너: 내부 스크롤을 끄고 전체가 같이 움직이게 함 */
-    .t-container { width: 100%; overflow: visible !important; margin-bottom: 15px; }
+    /* [수정] t-container의 내부 스크롤을 끄고, 표가 최소 너비를 유지하며 줌에 반응하게 함 */
+    .t-container { width: 100%; overflow: visible !important; }
     
-    /* 테이블 스타일: 가독성을 위한 최소한의 여백 확보 */
-    table { width: 100%; border-collapse: collapse; min-width: 450px; table-layout: fixed; border: 1px solid #dee2e6; }
-    th, td { border: 1px solid #dee2e6; padding: 2px 1px !important; font-size: 9px !important; line-height: 1.1; word-break: break-all; text-align: center; vertical-align: middle; }
-    th { background-color: #f8f9fa; font-weight: bold; height: 20px; }
+    table { width: 100%; border-collapse: collapse; min-width: 550px; table-layout: fixed; border: 1px solid #dee2e6; }
+    th, td { border: 1px solid #dee2e6; padding: 3px 1px !important; font-size: 9.5px !important; line-height: 1.2; word-break: break-all; text-align: center; vertical-align: middle; }
+    th { background-color: #f8f9fa; font-weight: bold; height: 22px; }
     
-    /* 셸 너비 재조정 (시간 셸 여백 확보) */
-    .w-place { width: 15%; }    /* 장소 */
-    .w-time  { width: 9.5%;    /* [수정] 시간을 9.5%로 늘려 여백 확보 */
-               letter-spacing: -0.5px; } /* 글자 간격을 좁혀 한 줄 유지 */
-    .w-event { width: 48%; }    /* 행사명 */
-    .w-count { width: 6.5%; }   /* 인원 */
-    .w-dept  { width: 15%; }    /* 부서 */
-    .w-stat  { width: 6%; }     /* 상태 */
+    /* 셸 너비 최종 배분 (시간 여백 확보 버전) */
+    .w-place { width: 14%; }    /* 장소 */
+    .w-time  { width: 11%;     /* 시간을 11%로 늘려 글자가 겹치지 않게 확보 */
+               letter-spacing: -0.3px; } 
+    .w-event { width: 45%; }    /* 행사명 */
+    .w-count { width: 7%; }     /* 인원 */
+    .w-dept  { width: 16%; }    /* 부서 */
+    .w-stat  { width: 7%; }     /* 상태 */
     
     .left { text-align: left !important; padding-left: 3px !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로드 및 정제
+# 3. 데이터 로직 (에러 발생했던 변수명 일치 작업 완료)
 @st.cache_data(ttl=60)
 def get_clean_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -57,6 +56,7 @@ def get_clean_data(s_date, e_date):
             def clean(t):
                 if not t: return ""
                 return str(t).replace("<", "&lt;").replace(">", "&gt;").replace("'", "&#39;").replace('"', "&quot;").strip()
+            
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             curr = s_dt
@@ -77,10 +77,11 @@ def get_clean_data(s_date, e_date):
         return pd.DataFrame(rows).drop_duplicates()
     except: return pd.DataFrame()
 
-# 4. 사이드바 & 데이터 호출
+# 4. 사이드바
 s_day = st.sidebar.date_input("시작", value=now_today)
 e_day = st.sidebar.date_input("종료", value=s_day)
 selected_bu = st.sidebar.multiselect("건물", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
+
 df = get_clean_data(s_day, e_day)
 
 # 5. 메인 출력
@@ -88,9 +89,12 @@ st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', uns
 
 if not df.empty:
     f_df = df[df['건물명'].isin(selected_bu)]
+    # 날짜별 루프
     for d in sorted(f_df['full_date'].unique()):
         day_df = f_df[f_df['full_date'] == d]
         st.markdown(f'<div class="date-header">📅 {d} ({day_df.iloc[0]["요일"]})</div>', unsafe_allow_html=True)
+        
+        # 건물별 루프
         for bu in BUILDING_ORDER:
             if bu in selected_bu:
                 bu_df = day_df[day_df['건물명'] == bu]
