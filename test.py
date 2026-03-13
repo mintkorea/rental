@@ -10,7 +10,7 @@ KST = ZoneInfo("Asia/Seoul")
 def today_kst(): return datetime.now(KST).date()
 
 st.set_page_config(
-    page_title="성의교정 대관 현황(M)", 
+    page_title="성의교정 대관 현황(M)",
     page_icon="🏫",  # 브라우저 탭 아이콘 (이모지)
    layout="centered"
 )
