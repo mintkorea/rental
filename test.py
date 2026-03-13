@@ -218,41 +218,4 @@ components.html("""
     </script>
 """, height=0)
 
-# 8. 가장 확실한 스크롤 자바스크립트
-components.html("""
-<script>
-    // 부모 창의 요소를 찾는 헬퍼 함수
-    const getParentEl = (selector) => window.parent.document.querySelector(selector);
-    const getParentAll = (selector) => window.parent.document.querySelectorAll(selector);
 
-    // 1. 결과창으로 자동 이동 (검색 시)
-    setTimeout(() => {
-        const res = getParentEl('#result-anchor');
-        if (res) res.scrollIntoView({behavior: 'smooth', block: 'start'});
-    }, 500);
-
-    // 2. 익스팬더 감시 및 스크롤 고정
-    const observer = new MutationObserver((mutations) => {
-        for (const mutation of mutations) {
-            if (mutation.type === 'attributes' && mutation.attributeName === 'aria-expanded') {
-                const expanded = mutation.target.getAttribute('aria-expanded') === 'true';
-                if (expanded) {
-                    // 열렸을 때 0.1초 뒤에 앵커 지점으로 스크롤
-                    setTimeout(() => {
-                        const anchor = getParentEl('#link-section-top');
-                        if (anchor) {
-                            anchor.scrollIntoView({behavior: 'smooth', block: 'start'});
-                        }
-                    }, 150);
-                }
-            }
-        }
-    });
-
-    // 모든 익스팬더 버튼에 대해 감시 시작
-    const expanderButtons = getParentAll('div[data-testid="stExpander"] button');
-    expanderButtons.forEach(btn => {
-        observer.observe(btn, { attributes: true });
-    });
-</script>
-""", height=0)
