@@ -132,7 +132,7 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
                             curr_row += 1
                     else:
                         worksheet.merge_range(curr_row, 0, curr_row, 6, "대관 내역 없음", cell_center_fmt)
-                        worksheet.set_row(curr_row, 25)
+                        worksheet.set_row(curr_row, 35)
                         curr_row += 1
                     curr_row += 1 # 건물 간 여백
             curr_row += 1 # 날짜 간 여백
