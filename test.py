@@ -11,7 +11,7 @@ def today_kst(): return datetime.now(KST).date()
 
 st.set_page_config(page_title="성의교정 대관 조회(M)", page_icon="🏫", layout="centered")
 
-# [수정] 근무조 계산 로직 (2026년 기준)
+# 근무조 계산 로직
 def get_work_shift(d):
     anchor = date(2026, 3, 13)
     diff = (d - anchor).days
@@ -22,12 +22,13 @@ def get_work_shift(d):
     ]
     return shifts[diff % 3]
 
+# 요일 변환 함수
 def get_weekday_names(codes):
     days = {"1":"월", "2":"화", "3":"수", "4":"목", "5":"금", "6":"토", "7":"일"}
     if not codes: return ""
     return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
 
-# 세션 관리 및 URL 파라미터 처리
+# 세션 및 파라미터 처리
 if 'target_date' not in st.session_state:
     st.session_state.target_date = today_kst()
 if 'search_performed' not in st.session_state:
@@ -42,15 +43,14 @@ if "d" in url_params:
         st.session_state.search_performed = True
     except: pass
 
-# 2. CSS 스타일 (동일 유지)
+# 2. CSS 스타일 (부서 위치 및 스크롤 보정)
 st.markdown("""
 <style>
     #top-anchor { position: absolute; top: 0; left: 0; }
     .block-container { padding: 1rem 1.2rem !important; max-width: 500px !important; }
     header { visibility: hidden; }
     .main-title { font-size: 24px !important; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 20px !important; }
-    .sat { color: #0000FF !important; }
-    .sun { color: #FF0000 !important; }
+    .sat { color: #0000FF !important; } .sun { color: #FF0000 !important; }
     .date-display-box { 
         text-align: center; background-color: #F8FAFF; padding: 15px 10px 8px 10px; 
         border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none;
@@ -70,12 +70,15 @@ st.markdown("""
     .nav-item:last-child { border-right: none !important; }
     .building-header { font-size: 18px !important; font-weight: bold; color: #2E5077; margin-top: 15px; border-bottom: 2px solid #2E5077; padding-bottom: 5px; margin-bottom: 12px; }
     .section-title { font-size: 15px; font-weight: bold; color: #555; margin: 10px 0 6px 0; padding-left: 5px; border-left: 4px solid #ccc; }
-    .event-card { border: 1px solid #E0E0E0; border-left: 5px solid #2E5077; padding: 12px 14px; border-radius: 5px; margin-bottom: 12px !important; background-color: #ffffff; }
+    
+    /* 카드 디자인 및 부서명 우측 정렬 */
+    .event-card { border: 1px solid #E0E0E0; border-left: 5px solid #2E5077; padding: 12px 14px; border-radius: 5px; margin-bottom: 12px !important; background-color: #ffffff; position: relative; }
     .status-badge { display: inline-block; padding: 2px 8px; font-size: 11px; border-radius: 10px; font-weight: bold; float: right; }
     .status-y { background-color: #FFF4E5; color: #B25E09; } .status-n { background-color: #E8F0FE; color: #1967D2; }
-    .bottom-info { font-size: 11px; color: #666; margin-top: 8px; border-top: 1px solid #f8f8f8; padding-top: 6px; display: flex; justify-content: space-between; align-items: flex-end; }
-    .info-left { flex: 1; display: flex; flex-direction: column; gap: 2px; }
-    .info-right { color: #888; margin-left: 10px; white-space: nowrap; }
+    
+    .bottom-info { font-size: 11px; color: #666; margin-top: 10px; border-top: 1px solid #f5f5f5; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .dept-info { color: #555; font-weight: 500; }
+
     .link-btn {
         display: block; padding: 14px; margin-bottom: 8px; background: #F0F4F8; color: #1E3A5F !important;
         text-decoration: none; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
@@ -85,7 +88,7 @@ st.markdown("""
     .open-room-name { font-weight: bold; color: #333; font-size: 17px !important; margin-bottom: 3px; }
     .open-room-time { font-size: 16px !important; color: #FF4B4B; font-weight: bold; margin-bottom: 5px; }
     .open-room-note { font-size: 14px !important; color: #444; line-height: 1.4; background: #eee; padding: 5px 8px; border-radius: 4px; }
-    .top-btn { position:fixed; bottom:80px; right:20px; z-index:999; }
+    .top-btn { position:fixed; bottom:20px; right:20px; z-index:999; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -110,7 +113,7 @@ with st.form("search_form"):
         st.query_params["d"] = selected_date.strftime("%Y-%m-%d")
         st.rerun()
 
-# 4. 데이터 로직 (생략)
+# 4. 데이터 로직
 @st.cache_data(ttl=300)
 def get_data(d):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -160,7 +163,7 @@ if st.session_state.search_performed:
                         st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
                         for _, row in ev_df.sort_values(by='startTime').iterrows():
                             s_cls, s_txt = ("status-y", "예약확정") if row['status'] == 'Y' else ("status-n", "신청대기")
-                            date_str = f"🗓️ {row['startDt']} ~ {row['endDt']} <span style='color:#2E5077; font-weight:bold;'>({get_weekday_names(row['allowDay'])})</span>" if title == "🗓️ 기간 대관" else f"🗓️ {row['startDt']}"
+                            date_str = f"🗓️ {row['startDt']} ~ {row['endDt']} <b style='color:#2E5077;'>({get_weekday_names(row['allowDay'])})</b>" if title == "🗓️ 기간 대관" else f"🗓️ {row['startDt']}"
                             st.markdown(f"""
                             <div class="event-card">
                                 <span class="status-badge {s_cls}">{s_txt}</span>
@@ -168,54 +171,36 @@ if st.session_state.search_performed:
                                 <div style="color:#FF4B4B; font-weight:bold; font-size:15px; margin:4px 0;">⏰ {row['startTime']} ~ {row['endTime']}</div>
                                 <div style="font-size:14px; color:#333; font-weight:bold;">📄 {row['eventNm']}</div>
                                 <div class="bottom-info">
-                                    <div class="info-left"><span>{date_str}</span></div>
-                                    <div class="info-right">👥 {row['mgDeptNm']}</div>
+                                    <span>{date_str}</span>
+                                    <span class="dept-info">👤 {row['mgDeptNm']}</span>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
         if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; border:1px dashed #eee; font-size:13px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 
-    # 지침 (동일)
+    # 🔓 초회 순찰 개방 지침
     st.markdown("<br><div class=\"building-header\">🔓 초회 순찰 개방 지침</div>", unsafe_allow_html=True)
-    # ... 지침 HTML 생략 ...
     bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
     st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201~1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
-# 6. 자주 찾는 홈페이지 (스크롤 고정용 앵커 설정)
-# HTML 앵커를 익스팬더 바로 위에 배치
-st.markdown('<div id="link-menu"></div>', unsafe_allow_html=True)
+# 6. 자주 찾는 홈페이지 (슬라이딩 문제 해결을 위해 Expander 제거)
+st.markdown("<div class=\"building-header\">🔗 바로가기 메뉴</div>", unsafe_allow_html=True)
+st.markdown('<div id="link-menu-anchor"></div>', unsafe_allow_html=True)
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관 현황</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
+with col2:
+    st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://www.onsafe.co.kr/" target="_blank" class="link-btn">📖 온세이프</a>', unsafe_allow_html=True)
 
-with st.expander("🔗 자주 찾는 홈페이지", expanded=False):
-    # 익스팬더가 열리면 이 내부의 컴포넌트가 로드되면서 자바스크립트를 실행함
-    st.markdown("""
-        <div style="padding-top:10px;">
-            <a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 성의교정 대관신청 현황</a>
-            <a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증 (SSO)</a>
-            <a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 S-tec 개인정보관리</a>
-            <a href="https://www.onsafe.co.kr/" target="_blank" class="link-btn">📖 온세이프 (법정교육)</a>
-            <a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무 (교대달력)</a>
-        </div>
-        
-        <script>
-            // 익스팬더가 열리는 시점에 부모 창의 위치를 #link-menu 앵커로 강제 이동
-            var scrollTarget = window.parent.document.getElementById("link-menu");
-            if (scrollTarget) {
-                scrollTarget.scrollIntoView({behavior: "smooth", block: "start"});
-            }
-        </script>
-    """, unsafe_allow_html=True)
-
-# 7. TOP 버튼 및 결과창 자동 스크롤 (기존 로직 유지)
+# 7. TOP 버튼
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
 
+# 8. 자동 스크롤 스크립트
 components.html("""
     <script>
-        // 결과 화면 로드 시 자동 스크롤
-        setTimeout(function() {
-            const res = window.parent.document.getElementById('result-anchor');
-            if (res) res.scrollIntoView({behavior: 'smooth', block: 'start'});
-        }, 500);
+        window.parent.document.getElementById('result-anchor')?.scrollIntoView({behavior: 'smooth', block: 'start'});
     </script>
 """, height=0)
-
-
