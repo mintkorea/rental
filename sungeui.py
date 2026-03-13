@@ -90,12 +90,16 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
         curr_row = 2
         dates = sorted(df['full_date'].unique()) if not df.empty else [start_date.strftime('%Y-%m-%d')]
         
-        for d_str in dates:
+        for i, d_str in enumerate(dates):
+            # --- [추가] 두 번째 날짜부터는 무조건 새로운 페이지에서 시작 ---
+            if i > 0:
+                worksheet.set_h_pagebreaks([curr_row])
+            
             d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
             shift = get_shift(d_obj)
             wd = ['','월','화','수','목','금','토','일'][d_obj.isoweekday()]
             
-            # 1. 날짜 헤더
+            # 날짜 헤더 작성...
             worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} ({wd}) | 근무조: {shift}", date_hdr_fmt)
             worksheet.set_row(curr_row, 30)
             curr_row += 1
