@@ -9,11 +9,7 @@ from zoneinfo import ZoneInfo
 KST = ZoneInfo("Asia/Seoul")
 def today_kst(): return datetime.now(KST).date()
 
-st.set_page_config(
-    page_title="성의교정 대관 현황(M)",
-    page_icon="🏫",  # 브라우저 탭 아이콘 (이모지)
-   layout="centered"
-)
+st.set_page_config(page_title="성의교정 대관 조회(M)", page_icon="🏫", layout="centered")
 
 # --- 세션 상태 및 URL 파라미터 동기화 ---
 if 'target_date' not in st.session_state:
