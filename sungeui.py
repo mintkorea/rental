@@ -6,7 +6,7 @@ import pytz
 import io
 
 # 1. 초기 설정
-st.set_page_config(page_title="성의교정 대관 현황 조회", layout="wide")
+st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
