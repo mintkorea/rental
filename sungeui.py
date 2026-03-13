@@ -1,198 +1,60 @@
-import streamlit as st
-import requests
-import pandas as pd
-from datetime import datetime, date, timedelta
-import pytz
-import io
-
-# 1. 초기 설정 및 페이지 레이아웃
-st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
-KST = pytz.timezone('Asia/Seoul')
-now_today = datetime.now(KST).date()
-
-# 건물 리스트 및 기본 설정
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
-DEFAULT_BUILDINGS = ["성의회관", "의생명산업연구원"]
-
-# 전역 CSS: 모바일 화면 최적화 및 표 스타일링
+# 전역 CSS 수정: PC에서는 가로로 꽉 차게, 모바일에서는 스크롤 발생
 st.markdown("""
 <style>
     .main-title { font-size: 24px !important; font-weight: 800; color: #1E3A5F; border-bottom: 3px solid #1E3A5F; padding-bottom: 10px; margin-bottom: 20px; }
     .date-container { background-color: #f1f3f5; padding: 15px; border-radius: 8px; margin-top: 35px; margin-bottom: 10px; }
     .building-title { color: #2E5077; margin-top: 20px; margin-bottom: 10px; border-left: 5px solid #2E5077; padding-left: 12px; font-weight: 700; }
     
-    /* [핵심] 모바일 셀 엉망 방지용 가로 스크롤 컨테이너 */
-    .scroll-wrapper { width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch; border: 1px solid #ddd; border-radius: 4px; }
+    /* 스크롤 컨테이너: PC에서는 100%, 모바일에서만 작동 */
+    .scroll-wrapper { width: 100%; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
     
-    /* [핵심] 표 너비를 강제로 고정 (최소 750px 이상) */
-    .custom-table { width: 800px !important; border-collapse: collapse; font-size: 13px; table-layout: fixed !important; }
-    .custom-table th, .custom-table td { border: 1px solid #ddd; padding: 10px 5px; text-align: center; vertical-align: middle; word-break: break-all; }
+    /* 표 설정: PC에서는 100% 너비, 모바일에서도 최소 750px 유지 */
+    .custom-table { width: 100% !important; min-width: 750px; border-collapse: collapse; font-size: 14px; table-layout: fixed !important; }
+    .custom-table th, .custom-table td { border: 1px solid #ddd; padding: 12px 8px; text-align: center; vertical-align: middle; word-break: break-all; }
     .custom-table th { background-color: #f8f9fa; font-weight: bold; }
     
     .scroll-hint { text-align: right; color: #888; font-size: 11px; margin-top: 5px; margin-bottom: 15px; }
+    
+    /* PC에서 너무 넓게 퍼지는 것 방지 (가독성 조절) */
+    @media (min-width: 1200px) {
+        .custom-table { font-size: 15px; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# 2. 3교대 근무조 로직
-def get_shift(target_date):
-    base_date = date(2026, 3, 13) # 기준일
-    diff = (target_date - base_date).days
-    shifts = ['A', 'B', 'C']
-    return f"{shifts[diff % 3]}조"
+# ... (중략: 데이터 로직 및 엑셀 함수) ...
 
-# 3. 데이터 수집 로직
-@st.cache_data(ttl=60)
-def get_data(start_date, end_date):
-    url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
-    params = {"mode": "getReservedData", "start": start_date.isoformat(), "end": end_date.isoformat()}
-    try:
-        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        raw = res.json().get('res', [])
-        rows = []
-        for item in raw:
-            if not item.get('startDt'): continue
-            s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
-            e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            allow_day_raw = str(item.get('allowDay', '')).lower()
-            allowed_days = [d.strip() for d in allow_day_raw.replace(' ', '').split(',') if d.strip().isdigit()] if allow_day_raw != 'none' else []
-            
-            curr = s_dt
-            while curr <= e_dt:
-                if start_date <= curr <= end_date:
-                    if not allowed_days or str(curr.isoweekday()) in allowed_days:
-                        rows.append({
-                            'full_date': curr.strftime('%Y-%m-%d'),
-                            '요일': ['','월','화','수','목','금','토','일'][curr.isoweekday()],
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '인원': str(item.get('peopleCount', '0')),
-                            '부스': str(item.get('boothCount', '0')),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
-                curr += timedelta(days=1)
-        return pd.DataFrame(rows)
-    except: return pd.DataFrame()
+# 표 출력 부분 (HTML 구조 동일, 클래스 유지)
+# table-rows 생성부에서 너비를 % 비율로 조정하여 PC 대응
+table_rows = ""
+for _, r in b_df.iterrows():
+    table_rows += f"""
+    <tr>
+        <td style="width:12%;">{r['장소']}</td>
+        <td style="width:13%;">{r['시간']}</td>
+        <td style="width:35%; text-align:left; padding-left:10px;">{r['행사명']}</td>
+        <td style="width:15%;">{r['부서']}</td>
+        <td style="width:8%;">{r['인원']}</td>
+        <td style="width:8%;">{r['부스']}</td>
+        <td style="width:9%;">{r['상태']}</td>
+    </tr>"""
 
-# 4. 엑셀 생성 (출력 최적화)
-def create_formatted_excel(df, start_date, end_date, selected_buildings):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('대관현황')
-        
-        # 인쇄 설정 (A4 가로, 한 페이지 맞춤)
-        worksheet.set_landscape()
-        worksheet.set_paper(9)
-        worksheet.fit_to_pages(1, 0)
-        
-        # 스타일 정의
-        title_fmt = workbook.add_format({'bold': True, 'font_size': 18, 'align': 'center', 'valign': 'vcenter'})
-        date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 12, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'border': 1})
-        bu_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#EBF1F8', 'border': 1})
-        hdr_fmt = workbook.add_format({'bold': True, 'font_size': 10, 'bg_color': '#F2F2F2', 'border': 1, 'align': 'center'})
-        cell_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'font_size': 10})
-        cnt_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_size': 10})
-
-        worksheet.merge_range('A1:G1', "성의교정 대관 현황 보고서", title_fmt)
-        
-        curr_row = 2
-        dates = sorted(df['full_date'].unique()) if not df.empty else [start_date.strftime('%Y-%m-%d')]
-        
-        for d_str in dates:
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", date_hdr_fmt)
-            curr_row += 1
-            for bu in selected_buildings:
-                bu_df = df[(df['full_date'] == d_str) & (df['건물명'] == bu)] if not df.empty else pd.DataFrame()
-                worksheet.merge_range(curr_row, 0, curr_row, 6, f"📍 {bu}", bu_fmt)
-                curr_row += 1
-                headers = ['장소', '시간', '행사명', '부서', '인원', '부스', '상태']
-                for col_num, h in enumerate(headers): worksheet.write(curr_row, col_num, h, hdr_fmt)
-                curr_row += 1
-                if not bu_df.empty:
-                    for _, r in bu_df.iterrows():
-                        worksheet.write(curr_row, 0, r['장소'], cell_fmt)
-                        worksheet.write(curr_row, 1, r['시간'], cnt_fmt)
-                        worksheet.write(curr_row, 2, r['행사명'], cell_fmt)
-                        worksheet.write(curr_row, 3, r['부서'], cell_fmt)
-                        worksheet.write(curr_row, 4, r['인원'], cnt_fmt)
-                        worksheet.write(curr_row, 5, r['부스'], cnt_fmt)
-                        worksheet.write(curr_row, 6, r['상태'], cnt_fmt)
-                        curr_row += 1
-                else:
-                    worksheet.merge_range(curr_row, 0, curr_row, 6, "내역 없음", cnt_fmt)
-                    curr_row += 1
-                curr_row += 1
-        worksheet.set_column('A:B', 15); worksheet.set_column('C:C', 35); worksheet.set_column('D:D', 18); worksheet.set_column('E:G', 8)
-    return output.getvalue()
-
-# 5. 메인 화면 구성
-with st.sidebar:
-    st.header("🔍 조회 설정")
-    s_date = st.date_input("시작일", value=now_today)
-    e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
-
-st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
-df = get_data(s_date, e_date)
-
-if not df.empty:
-    with st.sidebar:
-        excel_data = create_formatted_excel(df, s_date, e_date, sel_bu)
-        st.download_button("📥 엑셀 보고서 다운로드", data=excel_data, file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
-
-    for d_str in sorted(df['full_date'].unique()):
-        d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        wd_idx = d_obj.isoweekday()
-        color = 'blue' if wd_idx == 6 else 'red' if wd_idx == 7 else '#333'
-        wd_name = ['','월','화','수','목','금','토','일'][wd_idx]
-        
-        st.markdown(f"""<div class="date-container">
-            <h3 style="margin:0; color:{color};">📅 {d_str} ({wd_name}요일) | 근무조: {get_shift(d_obj)}</h3>
-        </div>""", unsafe_allow_html=True)
-        
-        for b in sel_bu:
-            b_df = df[(df['full_date'] == d_str) & (df['건물명'] == b)]
-            st.markdown(f'<div class="building-title">📍 {b}</div>', unsafe_allow_html=True)
-            
-            if not b_df.empty:
-                # [핵심] 모바일 셀 엉망 방지를 위한 커스텀 테이블 HTML 생성
-                table_rows = ""
-                for _, r in b_df.iterrows():
-                    table_rows += f"""
-                    <tr>
-                        <td style="width:100px;">{r['장소']}</td>
-                        <td style="width:110px;">{r['시간']}</td>
-                        <td style="width:260px; text-align:left; padding-left:8px;">{r['행사명']}</td>
-                        <td style="width:130px;">{r['부서']}</td>
-                        <td style="width:50px;">{r['인원']}</td>
-                        <td style="width:50px;">{r['부스']}</td>
-                        <td style="width:60px;">{r['상태']}</td>
-                    </tr>"""
-
-                table_html = f"""
-                <div class="scroll-wrapper">
-                    <table class="custom-table">
-                        <thead>
-                            <tr>
-                                <th style="width:100px;">장소</th>
-                                <th style="width:110px;">시간</th>
-                                <th style="width:260px;">행사명</th>
-                                <th style="width:130px;">부서</th>
-                                <th style="width:50px;">인원</th>
-                                <th style="width:50px;">부스</th>
-                                <th style="width:60px;">상태</th>
-                            </tr>
-                        </thead>
-                        <tbody>{table_rows}</tbody>
-                    </table>
-                </div>
-                <div class="scroll-hint">↔ 옆으로 밀어서 보기</div>"""
-                st.markdown(table_html, unsafe_allow_html=True)
-            else:
-                st.info("대관 내역이 없습니다.")
-else:
-    st.info("조회된 내역이 없습니다.")
+table_html = f"""
+<div class="scroll-wrapper">
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th style="width:12%;">장소</th>
+                <th style="width:13%;">시간</th>
+                <th style="width:35%;">행사명</th>
+                <th style="width:15%;">부서</th>
+                <th style="width:8%;">인원</th>
+                <th style="width:8%;">부스</th>
+                <th style="width:9%;">상태</th>
+            </tr>
+        </thead>
+        <tbody>{table_rows}</tbody>
+    </table>
+</div>
+<div class="scroll-hint">↔ 모바일은 옆으로 밀어서 보세요</div>"""
+st.markdown(table_html, unsafe_allow_html=True)
