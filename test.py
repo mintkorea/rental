@@ -75,13 +75,18 @@ st.markdown("""
     .status-badge { display: inline-block; padding: 2px 8px; font-size: 11px; border-radius: 10px; font-weight: bold; float: right; }
     .status-y { background-color: #FFF4E5; color: #B25E09; } .status-n { background-color: #E8F0FE; color: #1967D2; }
     .bottom-info { font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between; border-top: 1px solid #f0f0f0; padding-top: 6px; align-items: center; }
-
     .open-card { border: 2px dashed #2E5077; padding: 15px; border-radius: 10px; margin-bottom: 15px; background-color: #F8FAFF; }
     .open-bu-title { font-weight: 800; color: #2E5077; font-size: 19px !important; margin-bottom: 10px; border-bottom: 2px solid #D1D9E6; }
     .open-room-name { font-weight: bold; color: #333; font-size: 17px !important; margin-bottom: 3px; }
     .open-room-time { font-size: 16px !important; color: #FF4B4B; font-weight: bold; margin-bottom: 5px; }
     .open-room-note { font-size: 14px !important; color: #444; line-height: 1.4; background: #eee; padding: 5px 8px; border-radius: 4px; }
     .top-btn { position:fixed; bottom:80px; right:20px; z-index:999; }
+    
+    /* 슬라이딩 링크 버튼 스타일 */
+    .link-btn {
+        display: block; padding: 14px; margin-bottom: 8px; background: #F0F4F8; color: #1E3A5F !important;
+        text-decoration: none; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -154,10 +159,7 @@ if st.session_state.search_performed:
                         st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
                         for _, row in ev_df.sort_values(by='startTime').iterrows():
                             s_cls, s_txt = ("status-y", "예약확정") if row['status'] == 'Y' else ("status-n", "신청대기")
-                            if title == "🗓️ 기간 대관":
-                                date_info = f"🗓️ {row['startDt']}~{row['endDt']} <b style='color:#2E5077;'>({get_weekday_names(row['allowDay'])})</b>"
-                            else:
-                                date_info = f"🗓️ {row['startDt']}"
+                            date_info = f"🗓️ {row['startDt']}~{row['endDt']} <b style='color:#2E5077;'>({get_weekday_names(row['allowDay'])})</b>" if title == "🗓️ 기간 대관" else f"🗓️ {row['startDt']}"
                             
                             st.markdown(f"""
                             <div class="event-card">
@@ -165,10 +167,7 @@ if st.session_state.search_performed:
                                 <div style="font-size:16px; font-weight:bold; color:#1E3A5F; margin-bottom:4px;">📍 {row['placeNm']}</div>
                                 <div style="color:#FF4B4B; font-weight:bold; font-size:15px; margin:4px 0;">⏰ {row['startTime']} ~ {row['endTime']}</div>
                                 <div style="font-size:14px; color:#333; font-weight:bold;">📄 {row['eventNm']}</div>
-                                <div class="bottom-info">
-                                    <span>{date_info}</span>
-                                    <span style="font-weight:bold;">👤 {row['mgDeptNm']}</span>
-                                </div>
+                                <div class="bottom-info"><span>{date_info}</span><span style="font-weight:bold;">👤 {row['mgDeptNm']}</span></div>
                             </div>
                             """, unsafe_allow_html=True)
         if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; border:1px dashed #eee; font-size:13px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
@@ -189,6 +188,23 @@ if st.session_state.search_performed:
     bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
     st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201, 1202, 1203, 1204, 1205, 1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
+# 6. 슬라이딩 링크 메뉴 추가
+st.markdown('<div id="link-anchor"></div>', unsafe_allow_html=True)
+with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
+    st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
+    
+    # 익스팬더 열릴 때 화면 자동 보정 스크립트
+    components.html("""
+        <script>
+            window.parent.document.getElementById('link-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});
+        </script>
+    """, height=0)
+
+# 7. 검색 결과 자동 스크롤
+if st.session_state.search_performed:
     components.html("""
         <script>
             setTimeout(function() {
