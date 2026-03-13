@@ -22,13 +22,23 @@ def get_work_shift(d):
     ]
     return shifts[diff % 3]
 
-# 이동 및 검색 로직 세션 관리
+# [중요] URL 파라미터 읽기 및 세션 관리 복구
 if 'target_date' not in st.session_state:
     st.session_state.target_date = today_kst()
 if 'search_performed' not in st.session_state:
     st.session_state.search_performed = False
 
-# 2. CSS 스타일 (원본 디자인 + 슬라이딩 메뉴 디자인)
+# URL에서 날짜 파라미터(?d=YYYY-MM-DD)를 읽어 세션에 반영
+url_params = st.query_params
+if "d" in url_params:
+    try:
+        url_d = datetime.strptime(url_params["d"], "%Y-%m-%d").date()
+        if st.session_state.target_date != url_d:
+            st.session_state.target_date = url_d
+            st.session_state.search_performed = True
+    except: pass
+
+# 2. CSS 스타일
 st.markdown("""
 <style>
     #top-anchor { position: absolute; top: 0; left: 0; }
@@ -61,13 +71,9 @@ st.markdown("""
     .status-badge { display: inline-block; padding: 2px 8px; font-size: 11px; border-radius: 10px; font-weight: bold; float: right; }
     .status-y { background-color: #FFF4E5; color: #B25E09; } .status-n { background-color: #E8F0FE; color: #1967D2; }
     .bottom-info { font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between; border-top: 1px solid #f0f0f0; padding-top: 6px; }
-
-    /* 홈페이지 링크 버튼 디자인 */
     .link-btn {
-        display: block; padding: 14px; margin-bottom: 8px;
-        background: #F0F4F8; color: #1E3A5F !important;
-        text-decoration: none; border-radius: 10px; font-weight: bold;
-        text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
+        display: block; padding: 14px; margin-bottom: 8px; background: #F0F4F8; color: #1E3A5F !important;
+        text-decoration: none; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
     }
     .open-card { border: 2px dashed #2E5077; padding: 15px; border-radius: 10px; margin-bottom: 15px; background-color: #F8FAFF; }
     .open-bu-title { font-weight: 800; color: #2E5077; font-size: 19px !important; margin-bottom: 10px; border-bottom: 2px solid #D1D9E6; }
@@ -81,7 +87,7 @@ st.markdown("""
 st.markdown('<div id="top-anchor"></div>', unsafe_allow_html=True)
 st.markdown('<div class="main-title">🏫 성의교정 시설 대관 현황</div>', unsafe_allow_html=True)
 
-# 3. 입력부 (대관 유형 체크박스 복구)
+# 3. 입력부
 with st.form("search_form"):
     selected_date = st.date_input("날짜", value=st.session_state.target_date, label_visibility="collapsed")
     st.markdown('**🏢 건물 선택**')
@@ -109,17 +115,17 @@ def get_data(d):
         return pd.DataFrame(res.json().get('res', [])) if res.status_code == 200 else pd.DataFrame()
     except: return pd.DataFrame()
 
-# 5. 결과 출력 (전체 로직 복구)
+# 5. 결과 출력
 if st.session_state.search_performed:
     st.markdown('<div id="result-anchor"></div>', unsafe_allow_html=True)
     d = st.session_state.target_date
     df_raw = get_data(d)
     shift = get_work_shift(d)
     is_weekend = d.isoweekday() in [6, 7]
-    
     w_idx = d.weekday()
     w_str, w_class = ['월','화','수','목','금','토','일'][w_idx], ("sat" if w_idx == 5 else ("sun" if w_idx == 6 else ""))
     
+    # 네비게이션 바 (Before/Today/Next)
     st.markdown(f"""
     <div class="date-display-box">
         <span class="res-main-title">성의교정 대관 현황</span>
@@ -128,7 +134,7 @@ if st.session_state.search_performed:
     </div>
     <div class="nav-link-bar">
         <a href="./?d={(d-timedelta(1)).strftime('%Y-%m-%d')}" target="_self" class="nav-item">◀ Before</a>
-        <a href="./?d={date(2026,3,13).strftime('%Y-%m-%d')}" target="_self" class="nav-item">Today</a>
+        <a href="./?d={today_kst().strftime('%Y-%m-%d')}" target="_self" class="nav-item">Today</a>
         <a href="./?d={(d+timedelta(1)).strftime('%Y-%m-%d')}" target="_self" class="nav-item">Next ▶</a>
     </div>
     """, unsafe_allow_html=True)
@@ -153,7 +159,7 @@ if st.session_state.search_performed:
                             st.markdown(f"""<div class="event-card"><span class="status-badge {s_cls}">{s_txt}</span><div style="font-size:16px; font-weight:bold; color:#1E3A5F; margin-bottom:4px;">📍 {row['placeNm']}</div><div style="color:#FF4B4B; font-weight:bold; font-size:15px; margin:4px 0;">⏰ {row['startTime']} ~ {row['endTime']}</div><div style="font-size:14px; color:#333; font-weight:bold;">📄 {row['eventNm']}</div><div class="bottom-info"><span>🗓️ {row['startDt']}</span><span>👥 {row['mgDeptNm']}</span></div></div>""", unsafe_allow_html=True)
         if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; border:1px dashed #eee; font-size:13px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 
-    # 개방 지침 (복구)
+    # 개방 지침
     st.markdown("<br><div class=\"building-header\">🔓 초회 순찰 개방 지침</div>", unsafe_allow_html=True)
     sh_list = []
     if not is_weekend:
@@ -169,7 +175,7 @@ if st.session_state.search_performed:
     bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
     st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201, 1202, 1203, 1204, 1205, 1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
-# 6. 자주 찾는 홈페이지 (슬라이딩 보강)
+# 6. 자주 찾는 홈페이지 (슬라이딩)
 st.markdown('<div id="hp-top"></div>', unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지", expanded=False):
     st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 성의교정 대관신청 현황</a>', unsafe_allow_html=True)
@@ -182,14 +188,16 @@ with st.expander("🔗 자주 찾는 홈페이지", expanded=False):
 # 7. TOP 버튼
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
 
-# [스크롤 보정] 결과창 이동 및 메뉴 상단 고정
+# 8. 자동 스크롤 및 보정 자바스크립트
 components.html("""
     <script>
+        // 결과 영역으로 자동 스크롤
         setTimeout(function() {
             const res = window.parent.document.getElementById('result-anchor');
             if (res) res.scrollIntoView({behavior: 'smooth', block: 'start'});
         }, 500);
 
+        // 하단 홈페이지 메뉴 클릭 시 맨 위로 올리기
         const exp = window.parent.document.querySelector('div[data-testid="stExpander"]');
         if (exp) {
             exp.addEventListener('click', function() {
