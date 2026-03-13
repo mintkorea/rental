@@ -66,19 +66,28 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
         
-        # 서식 설정 (폰트 11)
+        # --- [추가] 인쇄 페이지 최적화 설정 ---
+        worksheet.set_landscape()     # 가로 방향 출력
+        worksheet.set_paper(9)        # A4 용지
+        worksheet.fit_to_pages(1, 0)  # 모든 열을 한 페이지 너비에 맞춤 (핵심)
+        worksheet.set_margins(0.5, 0.5, 0.5, 0.5) # 여백 좁게
+        
+        # --- 서식 설정 ---
         title_fmt = workbook.add_format({'bold': True, 'font_size': 18, 'align': 'center', 'valign': 'vcenter'})
-        date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 14, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter'})
+        date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 13, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         bu_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#EBF1F8', 'border': 1, 'valign': 'vcenter'})
         hdr_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#F2F2F2', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
-        cell_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'font_size': 11})
-        cnt_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_size': 11})
+        
+        # 텍스트가 길면 자동으로 줄바꿈되는 서식 (행사명용)
+        cell_left_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'font_size': 11})
+        # 숫자나 짧은 텍스트용 가운데 정렬 서식
+        cell_center_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True, 'font_size': 11})
 
+        # 제목 작성
         worksheet.merge_range('A1:G1', "성의교정 대관 현황 보고서", title_fmt)
         worksheet.set_row(0, 40)
         
         curr_row = 2
-        # 데이터가 있는 날짜별로 루프
         dates = sorted(df['full_date'].unique()) if not df.empty else [start_date.strftime('%Y-%m-%d')]
         
         for d_str in dates:
@@ -86,7 +95,7 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
             shift = get_shift(d_obj)
             wd = ['','월','화','수','목','금','토','일'][d_obj.isoweekday()]
             
-            # 날짜 헤더
+            # 1. 날짜 헤더
             worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} ({wd}) | 근무조: {shift}", date_hdr_fmt)
             worksheet.set_row(curr_row, 30)
             curr_row += 1
@@ -95,36 +104,46 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
                 if bu in selected_buildings:
                     bu_df = df[(df['full_date'] == d_str) & (df['건물명'] == bu)] if not df.empty else pd.DataFrame()
                     
+                    # 2. 건물명 헤더
                     worksheet.merge_range(curr_row, 0, curr_row, 6, f"  📍 {bu}", bu_fmt)
                     worksheet.set_row(curr_row, 28)
                     curr_row += 1
                     
+                    # 3. 표 헤더
                     headers = ['장소', '시간', '행사명', '부서', '인원', '부스', '상태']
                     for col_num, h in enumerate(headers):
                         worksheet.write(curr_row, col_num, h, hdr_fmt)
                     worksheet.set_row(curr_row, 25)
                     curr_row += 1
                     
+                    # 4. 데이터 영역
                     if not bu_df.empty:
                         for _, row in bu_df.iterrows():
-                            worksheet.write(curr_row, 0, row['장소'], cell_fmt)
-                            worksheet.write(curr_row, 1, row['시간'], cnt_fmt)
-                            worksheet.write(curr_row, 2, row['행사명'], cell_fmt)
-                            worksheet.write(curr_row, 3, row['부서'], cell_fmt)
-                            worksheet.write(curr_row, 4, row['인원'], cnt_fmt)
-                            worksheet.write(curr_row, 5, row['부스'], cnt_fmt)
-                            worksheet.write(curr_row, 6, row['상태'], cnt_fmt)
-                            worksheet.set_row(curr_row, 35)
+                            worksheet.write(curr_row, 0, row['장소'], cell_left_fmt)
+                            worksheet.write(curr_row, 1, row['시간'], cell_center_fmt)
+                            worksheet.write(curr_row, 2, row['행사명'], cell_left_fmt) # 행사명 왼쪽 정렬
+                            worksheet.write(curr_row, 3, row['부서'], cell_left_fmt)
+                            worksheet.write(curr_row, 4, row['인원'], cell_center_fmt)
+                            worksheet.write(curr_row, 5, row['부스'], cell_center_fmt)
+                            worksheet.write(curr_row, 6, row['상태'], cell_center_fmt)
+                            
+                            # [중요] 내용 길이에 따라 행 높이 유동적으로 설정
+                            worksheet.set_row(curr_row, None) 
                             curr_row += 1
                     else:
-                        worksheet.merge_range(curr_row, 0, curr_row, 6, "대관 내역 없음", cnt_fmt)
-                        worksheet.set_row(curr_row, 35)
+                        worksheet.merge_range(curr_row, 0, curr_row, 6, "대관 내역 없음", cell_center_fmt)
+                        worksheet.set_row(curr_row, 25)
                         curr_row += 1
-                    curr_row += 1
-            curr_row += 1
+                    curr_row += 1 # 건물 간 여백
+            curr_row += 1 # 날짜 간 여백
 
-        worksheet.set_column('A:A', 25); worksheet.set_column('B:B', 16); worksheet.set_column('C:C', 50)
-        worksheet.set_column('D:D', 22); worksheet.set_column('E:G', 10)
+        # --- [중요] 열 너비 재조정 (인쇄 시 페이지 이탈 방지) ---
+        worksheet.set_column('A:A', 18) # 장소
+        worksheet.set_column('B:B', 15) # 시간
+        worksheet.set_column('C:C', 35) # 행사명 (가장 중요, 너무 넓지 않게 조정)
+        worksheet.set_column('D:D', 18) # 부서
+        worksheet.set_column('E:G', 8)  # 인원, 부스, 상태 (좁게 설정)
+
     return output.getvalue()
 
 # 5. 메인 UI
