@@ -20,7 +20,7 @@ def get_shift(target_date):
     shifts = ['A', 'B', 'C']
     return f"{shifts[diff % 3]}조"
 
-# 3. 데이터 수집 로직 (기존 유지)
+# 3. 데이터 수집 로직 (기간 전체 수집 후 요일별 전개)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -29,14 +29,18 @@ def get_data(start_date, end_date):
         res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         raw = res.json().get('res', [])
         rows = []
+        
         for item in raw:
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            
             allow_day_raw = str(item.get('allowDay', '')).lower()
             allowed_days = [d.strip() for d in allow_day_raw.replace(' ', '').split(',') if d.strip().isdigit()] if allow_day_raw != 'none' else []
+            
             curr = s_dt
             while curr <= e_dt:
+                # 선택한 기간 내에 포함되는 날짜만 추출
                 if start_date <= curr <= end_date:
                     if not allowed_days or str(curr.isoweekday()) in allowed_days:
                         rows.append({
@@ -55,40 +59,26 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 엑셀 생성 (출력 및 페이지 넘침 방지 설정 강화)
+# 4. 엑셀 생성 (날짜별 그룹화 반영)
 def create_formatted_excel(df, start_date, end_date, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
         
-        # [핵심] 인쇄 설정: 한 페이지에 모든 열이 들어가도록 가로 맞춤
-        worksheet.set_landscape() # 가로 출력
-        worksheet.set_paper(9)    # A4 용지
-        worksheet.fit_to_pages(1, 0) # 가로를 1페이지에 맞춤
-        
-        # 서식 설정
-        title_fmt = workbook.add_format({'bold': True, 'font_size': 18, 'align': 'center', 'valign': 'vcenter', 'font_name': '맑은 고딕'})
-        date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 12, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-        bu_fmt = workbook.add_format({'bold': True, 'font_size': 10, 'bg_color': '#EBF1F8', 'border': 1, 'valign': 'vcenter', 'font_name': '맑은 고딕'})
-        hdr_fmt = workbook.add_format({'bold': True, 'font_size': 10, 'bg_color': '#F2F2F2', 'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_name': '맑은 고딕'})
-        
-        # [핵심] 내용 셀: 자동 줄바꿈(text_wrap) 적용
-        cell_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'font_size': 10, 'font_name': '맑은 고딕'})
-        cnt_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_size': 10, 'font_name': '맑은 고딕'})
+        # 서식 설정 (폰트 11)
+        title_fmt = workbook.add_format({'bold': True, 'font_size': 18, 'align': 'center', 'valign': 'vcenter'})
+        date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 14, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter'})
+        bu_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#EBF1F8', 'border': 1, 'valign': 'vcenter'})
+        hdr_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#F2F2F2', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+        cell_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'font_size': 11})
+        cnt_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_size': 11})
 
-        # 제목 작성
-        worksheet.merge_range('A1:G1', f"성의교정 대관 현황 보고서 ({start_date} ~ {end_date})", title_fmt)
-        worksheet.set_row(0, 35)
-        
-        # 열 너비 강제 고정 (페이지 이탈 방지)
-        worksheet.set_column('A:A', 15) # 장소
-        worksheet.set_column('B:B', 15) # 시간
-        worksheet.set_column('C:C', 35) # 행사명 (자동 줄바꿈됨)
-        worksheet.set_column('D:D', 15) # 부서
-        worksheet.set_column('E:G', 8)  # 인원, 부스, 상태
+        worksheet.merge_range('A1:G1', "성의교정 대관 현황 보고서", title_fmt)
+        worksheet.set_row(0, 40)
         
         curr_row = 2
+        # 데이터가 있는 날짜별로 루프
         dates = sorted(df['full_date'].unique()) if not df.empty else [start_date.strftime('%Y-%m-%d')]
         
         for d_str in dates:
@@ -98,22 +88,21 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
             
             # 날짜 헤더
             worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} ({wd}) | 근무조: {shift}", date_hdr_fmt)
-            worksheet.set_row(curr_row, 25)
+            worksheet.set_row(curr_row, 30)
             curr_row += 1
             
             for bu in BUILDING_ORDER:
                 if bu in selected_buildings:
                     bu_df = df[(df['full_date'] == d_str) & (df['건물명'] == bu)] if not df.empty else pd.DataFrame()
                     
-                    # 건물명 헤더
                     worksheet.merge_range(curr_row, 0, curr_row, 6, f"  📍 {bu}", bu_fmt)
-                    worksheet.set_row(curr_row, 22)
+                    worksheet.set_row(curr_row, 28)
                     curr_row += 1
                     
                     headers = ['장소', '시간', '행사명', '부서', '인원', '부스', '상태']
                     for col_num, h in enumerate(headers):
                         worksheet.write(curr_row, col_num, h, hdr_fmt)
-                    worksheet.set_row(curr_row, 20)
+                    worksheet.set_row(curr_row, 25)
                     curr_row += 1
                     
                     if not bu_df.empty:
@@ -125,23 +114,24 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
                             worksheet.write(curr_row, 4, row['인원'], cnt_fmt)
                             worksheet.write(curr_row, 5, row['부스'], cnt_fmt)
                             worksheet.write(curr_row, 6, row['상태'], cnt_fmt)
-                            # 행 높이를 자동으로 조절하거나 넉넉하게 설정
-                            worksheet.set_row(curr_row, 30) 
+                            worksheet.set_row(curr_row, 35)
                             curr_row += 1
                     else:
                         worksheet.merge_range(curr_row, 0, curr_row, 6, "대관 내역 없음", cnt_fmt)
-                        worksheet.set_row(curr_row, 25)
+                        worksheet.set_row(curr_row, 35)
                         curr_row += 1
-                    curr_row += 1 # 건물 간 간격
-            curr_row += 1 # 날짜 간 간격
+                    curr_row += 1
+            curr_row += 1
 
+        worksheet.set_column('A:A', 25); worksheet.set_column('B:B', 16); worksheet.set_column('C:C', 50)
+        worksheet.set_column('D:D', 22); worksheet.set_column('E:G', 10)
     return output.getvalue()
 
-# 5. 메인 UI (기존 유지)
+# 5. 메인 UI
 with st.sidebar:
     st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
-    e_date = st.date_input("종료일", value=s_date)
+    e_date = st.date_input("종료일", value=s_date) # 시작일 기준으로 기본값 설정
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=DEFAULT_BUILDINGS)
     st.write("---")
 
@@ -154,6 +144,7 @@ if not df.empty:
         excel_data = create_formatted_excel(df, s_date, e_date, sel_bu)
         st.download_button("📥 기간 전체 엑셀 다운로드", data=excel_data, file_name=f"대관현황_{s_date}_{e_date}.xlsx", use_container_width=True)
 
+    # 화면 출력: 날짜별로 그룹화
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
         wd_idx = d_obj.isoweekday()
