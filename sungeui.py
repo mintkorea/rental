@@ -128,7 +128,7 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
                             worksheet.write(curr_row, 6, row['상태'], cell_center_fmt)
                             
                             # [중요] 내용 길이에 따라 행 높이 유동적으로 설정
-                            worksheet.set_row(curr_row, None) 
+                            worksheet.set_row(curr_row, 35) 
                             curr_row += 1
                     else:
                         worksheet.merge_range(curr_row, 0, curr_row, 6, "대관 내역 없음", cell_center_fmt)
