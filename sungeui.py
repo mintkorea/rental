@@ -138,10 +138,10 @@ def create_formatted_excel(df, start_date, end_date, selected_buildings):
             curr_row += 1 # 날짜 간 여백
 
         # --- [중요] 열 너비 재조정 (인쇄 시 페이지 이탈 방지) ---
-        worksheet.set_column('A:A', 18) # 장소
+        worksheet.set_column('A:A', 25) # 장소
         worksheet.set_column('B:B', 15) # 시간
-        worksheet.set_column('C:C', 35) # 행사명 (가장 중요, 너무 넓지 않게 조정)
-        worksheet.set_column('D:D', 18) # 부서
+        worksheet.set_column('C:C', 40) # 행사명 (가장 중요, 너무 넓지 않게 조정)
+        worksheet.set_column('D:D', 25) # 부서
         worksheet.set_column('E:G', 8)  # 인원, 부스, 상태 (좁게 설정)
 
     return output.getvalue()
