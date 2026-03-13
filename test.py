@@ -181,18 +181,42 @@ if st.session_state.search_performed:
     bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
     st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201~1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
-# 6. 자주 찾는 홈페이지 (강력한 앵커와 함께)
-st.markdown('<div id="link-section-top"></div>', unsafe_allow_html=True)
-with st.expander("🔗 자주 찾는 홈페이지", expanded=False):
-    # 익스팬더 바로 아래에 앵커를 한 번 더 배치
-    st.markdown('<div id="inside-expander"></div>', unsafe_allow_html=True)
-    st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 성의교정 대관신청 현황</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증 (SSO)</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 S-tec 개인정보관리</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://www.onsafe.co.kr/" target="_blank" class="link-btn">📖 온세이프 (법정교육)</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무 (교대달력)</a>', unsafe_allow_html=True)
+# 6. 자주 찾는 홈페이지 (스크롤 고정용 앵커 설정)
+# HTML 앵커를 익스팬더 바로 위에 배치
+st.markdown('<div id="link-menu"></div>', unsafe_allow_html=True)
 
+with st.expander("🔗 자주 찾는 홈페이지", expanded=False):
+    # 익스팬더가 열리면 이 내부의 컴포넌트가 로드되면서 자바스크립트를 실행함
+    st.markdown("""
+        <div style="padding-top:10px;">
+            <a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 성의교정 대관신청 현황</a>
+            <a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증 (SSO)</a>
+            <a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 S-tec 개인정보관리</a>
+            <a href="https://www.onsafe.co.kr/" target="_blank" class="link-btn">📖 온세이프 (법정교육)</a>
+            <a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무 (교대달력)</a>
+        </div>
+        
+        <script>
+            // 익스팬더가 열리는 시점에 부모 창의 위치를 #link-menu 앵커로 강제 이동
+            var scrollTarget = window.parent.document.getElementById("link-menu");
+            if (scrollTarget) {
+                scrollTarget.scrollIntoView({behavior: "smooth", block: "start"});
+            }
+        </script>
+    """, unsafe_allow_html=True)
+
+# 7. TOP 버튼 및 결과창 자동 스크롤 (기존 로직 유지)
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
+
+components.html("""
+    <script>
+        // 결과 화면 로드 시 자동 스크롤
+        setTimeout(function() {
+            const res = window.parent.document.getElementById('result-anchor');
+            if (res) res.scrollIntoView({behavior: 'smooth', block: 'start'});
+        }, 500);
+    </script>
+""", height=0)
 
 # 8. 가장 확실한 스크롤 자바스크립트
 components.html("""
