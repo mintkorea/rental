@@ -11,51 +11,22 @@ def today_kst(): return datetime.now(KST).date()
 
 st.set_page_config(page_title="성의교정 대관 조회(M)", page_icon="🏫", layout="centered")
 
-# [로직] 근무조 계산
+# 근무조 계산
 def get_work_shift(d):
     anchor = date(2026, 3, 13)
     diff = (d - anchor).days
-    shifts = [
-        {"n": "A조", "bg": "#FF9800"},
-        {"n": "B조", "bg": "#E91E63"},
-        {"n": "C조", "bg": "#2196F3"}
-    ]
+    shifts = [{"n": "A조", "bg": "#FF9800"}, {"n": "B조", "bg": "#E91E63"}, {"n": "C조", "bg": "#2196F3"}]
     return shifts[diff % 3]
 
-# [로직] 요일 변환
 def get_weekday_names(codes):
     days = {"1":"월", "2":"화", "3":"수", "4":"목", "5":"금", "6":"토", "7":"일"}
     if not codes: return ""
     return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
 
-# [데이터] API 호출 함수
-@st.cache_data(ttl=300)
-def get_data(d):
-    url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
-    params = {"mode": "getReservedData", "start": d.strftime('%Y-%m-%d'), "end": d.strftime('%Y-%m-%d')}
-    try:
-        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        if res.status_code == 200:
-            return pd.DataFrame(res.json().get('res', []))
-        return pd.DataFrame()
-    except:
-        return pd.DataFrame()
-
-# 세션 관리
 if 'target_date' not in st.session_state: st.session_state.target_date = today_kst()
 if 'search_performed' not in st.session_state: st.session_state.search_performed = False
 
-# URL 파라미터 처리 (날짜 이동용)
-url_params = st.query_params
-if "d" in url_params:
-    try:
-        param_date = datetime.strptime(url_params["d"], "%Y-%m-%d").date()
-        if st.session_state.target_date != param_date:
-            st.session_state.target_date = param_date
-        st.session_state.search_performed = True
-    except: pass
-
-# 2. CSS 스타일 (디자인 및 부서명 우측 정렬)
+# 2. CSS 스타일 (디자인 및 부서명 우측 정렬 유지)
 st.markdown("""
 <style>
     #top-anchor { position: absolute; top: 0; left: 0; }
@@ -74,12 +45,8 @@ st.markdown("""
         border: 1px solid #D1D9E6 !important; border-radius: 0 0 10px 10px !important; 
         margin-bottom: 25px !important; overflow: hidden !important;
     }
-    .nav-item {
-        flex: 1 !important; text-align: center !important; padding: 12px 0 !important;
-        text-decoration: none !important; color: #1E3A5F !important; font-weight: bold !important; 
-        border-right: 1px solid #F0F0F0 !important; font-size: 13px !important;
-    }
-    .nav-item:last-child { border-right: none !important; }
+    .nav-item { flex: 1; text-align: center; padding: 12px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; border-right: 1px solid #F0F0F0; font-size: 13px; }
+    .nav-item:last-child { border-right: none; }
     .building-header { font-size: 18px !important; font-weight: bold; color: #2E5077; margin-top: 15px; border-bottom: 2px solid #2E5077; padding-bottom: 5px; margin-bottom: 12px; }
     .section-title { font-size: 15px; font-weight: bold; color: #555; margin: 10px 0 6px 0; padding-left: 5px; border-left: 4px solid #ccc; }
     .event-card { border: 1px solid #E0E0E0; border-left: 5px solid #2E5077; padding: 12px 14px; border-radius: 5px; margin-bottom: 12px !important; background-color: #ffffff; }
@@ -90,14 +57,13 @@ st.markdown("""
         display: block; padding: 14px; margin-bottom: 8px; background: #F0F4F8; color: #1E3A5F !important;
         text-decoration: none; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
     }
-    .top-btn { position:fixed; bottom:20px; right:20px; z-index:999; }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown('<div id="top-anchor"></div>', unsafe_allow_html=True)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-# 3. 입력 폼 (검색 기능)
+# 3. 입력 폼 (검색 기능 100% 복구)
 with st.form("search_form"):
     selected_date = st.date_input("날짜", value=st.session_state.target_date, label_visibility="collapsed")
     st.markdown('**🏢 건물 선택**')
@@ -112,16 +78,24 @@ with st.form("search_form"):
     if st.form_submit_button("🔍 검색", use_container_width=True):
         st.session_state.target_date = selected_date
         st.session_state.search_performed = True
-        st.query_params["d"] = selected_date.strftime("%Y-%m-%d")
         st.rerun()
 
-# 4. 결과 출력
+# 4. 데이터 로직
+@st.cache_data(ttl=300)
+def get_data(d):
+    url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
+    params = {"mode": "getReservedData", "start": d.strftime('%Y-%m-%d'), "end": d.strftime('%Y-%m-%d')}
+    try:
+        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        return pd.DataFrame(res.json().get('res', [])) if res.status_code == 200 else pd.DataFrame()
+    except: return pd.DataFrame()
+
+# 5. 결과 출력
 if st.session_state.search_performed:
     st.markdown('<div id="result-anchor"></div>', unsafe_allow_html=True)
     d = st.session_state.target_date
     df_raw = get_data(d)
     shift = get_work_shift(d)
-    is_weekend = d.isoweekday() in [6, 7]
     w_idx = d.weekday()
     w_str, w_class = ['월','화','수','목','금','토','일'][w_idx], ("sat" if w_idx == 5 else ("sun" if w_idx == 6 else ""))
     
@@ -155,46 +129,37 @@ if st.session_state.search_performed:
                         st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
                         for _, row in ev_df.sort_values(by='startTime').iterrows():
                             s_cls, s_txt = ("status-y", "예약확정") if row['status'] == 'Y' else ("status-n", "신청대기")
-                            date_str = f"🗓️ {row['startDt']}" if title == "📌 당일 대관" else f"🗓️ {row['startDt']}~{row['endDt']} <b style='color:#2E5077;'>({get_weekday_names(row['allowDay'])})</b>"
+                            date_str = f"🗓️ {row['startDt']}" if title == "📌 당일 대관" else f"🗓️ {row['startDt']}~{row['endDt']} ({get_weekday_names(row['allowDay'])})"
                             st.markdown(f"""
                             <div class="event-card">
                                 <span class="status-badge {s_cls}">{s_txt}</span>
                                 <div style="font-size:16px; font-weight:bold; color:#1E3A5F; margin-bottom:4px;">📍 {row['placeNm']}</div>
                                 <div style="color:#FF4B4B; font-weight:bold; font-size:15px; margin:4px 0;">⏰ {row['startTime']} ~ {row['endTime']}</div>
                                 <div style="font-size:14px; color:#333; font-weight:bold;">📄 {row['eventNm']}</div>
-                                <div class="bottom-info">
-                                    <span>{date_str}</span>
-                                    <span style="font-weight:bold;">👤 {row['mgDeptNm']}</span>
-                                </div>
+                                <div class="bottom-info"><span>{date_str}</span><span style="font-weight:bold;">👤 {row['mgDeptNm']}</span></div>
                             </div>
                             """, unsafe_allow_html=True)
-        if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; border:1px dashed #eee; font-size:13px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; font-size:13px;">대관 내역 없음</div>', unsafe_allow_html=True)
 
-# 5. [의도대로!] 슬라이딩 바로가기 메뉴
-st.markdown('<div id="sliding-anchor"></div>', unsafe_allow_html=True)
+# 6. 바로가기 메뉴 (슬라이딩 고정 기능 추가)
+st.markdown('<div id="link-anchor"></div>', unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://www.onsafe.co.kr/" target="_blank" class="link-btn">📖 온세이프</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
     
-    # 메뉴 열릴 때 화면 고정 스크립트
+    # 익스팬더가 열릴 때 부모 창을 위로 끌어올려 버튼이 바로 보이게 함
     components.html("""
         <script>
-            window.parent.document.getElementById('sliding-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});
+            window.parent.document.getElementById('link-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});
         </script>
     """, height=0)
 
-# 6. 상단 이동 버튼
-st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
-
-# 7. 검색 시 결과창 자동 이동
+# 7. 검색 결과 자동 스크롤
 if st.session_state.search_performed:
     components.html("""
         <script>
-            setTimeout(() => {
-                window.parent.document.getElementById('result-anchor')?.scrollIntoView({behavior: 'smooth', block: 'start'});
-            }, 300);
+            setTimeout(() => { window.parent.document.getElementById('result-anchor')?.scrollIntoView({behavior: 'smooth', block: 'start'}); }, 300);
         </script>
     """, height=0)
