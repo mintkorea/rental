@@ -171,24 +171,9 @@ with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
 
+# 하단 여백 추가 (스크롤 가려짐 방지)
+st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
 
-
-
- # 개방 지침
-    st.markdown("<br><div class=\"building-header\">🔓 초회 순찰 개방 지침</div>", unsafe_allow_html=True)
-    sh_list = []
-    if not is_weekend:
-        sh_list.append({"r": "421, 422, 521, 522호", "t": "주중: 오전 개방 / 오후 원칙적 폐쇄", "n": "학생 요청 시 무리한 퇴실 독촉 금지"})
-        if date(d.year, 3, 2) <= d <= date(d.year, 4, 30):
-            sh_list.append({"r": "402, 403, 404, 405, 406, 407호", "t": "08:00 ~ 20:00 (3/2~4/30)", "n": "첫 순찰 개방 / 마지막 순찰 잠금"})
-    if date(d.year, 2, 7) <= d <= date(d.year, 4, 24):
-        sh_note = "평일: 직원 개방 / 야간 21:00 폐쇄만" if not is_weekend else "주말: 학생 요청 시 해당 시간만 개방"
-        sh_list.append({"r": "801호", "t": "09:00 ~ 21:00 (2/7~4/24)", "n": sh_note})
-    if sh_list:
-        sh_html = "".join([f'<div style="margin-bottom:12px;"><div class="open-room-name">• {i["r"]}</div><div class="open-room-time">⏰ {i["t"]}</div><div class="open-room-note">{i["n"]}</div></div>' for i in sh_list])
-        st.markdown(f'<div class="open-card"><div class="open-bu-title">🏢 성의회관</div>{sh_html}</div>', unsafe_allow_html=True)
-    bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
-    st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201, 1202, 1203, 1204, 1205, 1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
     components.html("""
         <script>
