@@ -21,11 +21,7 @@ def get_weekday_names(codes):
 def get_work_shift(d):
     anchor = date(2026, 3, 13)
     diff = (d - anchor).days
-    shifts = [
-        {"n": "A조", "bg": "#FF9800"},
-        {"n": "B조", "bg": "#E91E63"},
-        {"n": "C조", "bg": "#2196F3"}
-    ]
+    shifts = [{"n": "A조", "bg": "#FF9800"}, {"n": "B조", "bg": "#E91E63"}, {"n": "C조", "bg": "#2196F3"}]
     return shifts[diff % 3]
 
 # 이동 및 검색 로직
@@ -84,13 +80,18 @@ st.markdown("""
     
     .top-btn { position:fixed; bottom:80px; right:20px; z-index:999; }
     
-    /* 링크 스타일 수정: 테두리 박스 제거 및 텍스트 중앙 정렬 */
+    /* 🔗 링크 사이 간격 최적화 */
     .link-btn {
-        display: block; padding: 12px; margin-bottom: 2px; color: #1E3A5F !important;
-        text-decoration: none; font-weight: bold; text-align: center; font-size: 15px;
-        border-bottom: 1px solid #F0F0F0;
+        display: block; 
+        padding: 5px 0;    /* 위아래 여백을 14px에서 5px로 대폭 축소 */
+        margin-bottom: 0;  /* 아래쪽 바깥 여백 제거 */
+        color: #1E3A5F !important;
+        text-decoration: none; 
+        font-weight: bold; 
+        text-align: center; 
+        font-size: 15px;
+        border: none !important; /* 박스 테두리 완벽 제거 */
     }
-    .link-btn:last-child { border-bottom: none; }
     .spacer { height: 100px; }
 </style>
 """, unsafe_allow_html=True)
@@ -98,7 +99,7 @@ st.markdown("""
 st.markdown('<div id="top-anchor"></div>', unsafe_allow_html=True)
 st.markdown('<div class="main-title">🏫 성의교정 시설 대관 현황</div>', unsafe_allow_html=True)
 
-# 3. 입력부
+# 3. 입력부 (이하 동일)
 with st.form("search_form"):
     selected_date = st.date_input("날짜", value=st.session_state.target_date, label_visibility="collapsed")
     st.markdown('**🏢 건물 선택**')
@@ -114,7 +115,7 @@ with st.form("search_form"):
         st.query_params["d"] = selected_date.strftime("%Y-%m-%d")
         st.rerun()
 
-# 4. 데이터 로직
+# 4~6 섹션 로직 유지...
 @st.cache_data(ttl=300)
 def get_data(d):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -124,7 +125,6 @@ def get_data(d):
         return pd.DataFrame(res.json().get('res', [])) if res.status_code == 200 else pd.DataFrame()
     except: return pd.DataFrame()
 
-# 5. 결과 출력
 if st.session_state.search_performed:
     st.markdown('<div id="result-anchor"></div>', unsafe_allow_html=True)
     d = st.session_state.target_date
@@ -176,7 +176,6 @@ if st.session_state.search_performed:
                             """, unsafe_allow_html=True)
         if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; border:1px dashed #eee; font-size:13px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 
-    # 6. 개방 지침
     st.markdown("<br><div class=\"building-header\">🔓 강의실 개방 일람/지침</div>", unsafe_allow_html=True)
     sh_list = []
     if not is_weekend:
@@ -194,16 +193,9 @@ if st.session_state.search_performed:
     bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
     st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201, 1202, 1203, 1204, 1205, 1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
-    # 검색 결과로 위로 부드럽게 밀어올려주는 기능
-    components.html("""
-        <script>
-            setTimeout(function() {
-                window.parent.document.getElementById('result-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});
-            }, 300);
-        </script>
-    """, height=0)
+    components.html("""<script>setTimeout(function() {window.parent.document.getElementById('result-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});}, 300);</script>""", height=0)
 
-# 7. 자주 찾는 링크 (경비교육 수정 및 박스 제거)
+# 7. 자주 찾는 링크 (여백 최소화 적용)
 st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
