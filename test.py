@@ -89,10 +89,10 @@ st.markdown("""
         text-decoration: none; 
         font-weight: bold; 
         text-align: center; 
-        font-size: 10px;
+        font-size: 15px;
         border: none !important; /* 박스 테두리 완벽 제거 */
     }
-    .spacer { height: 100px; }
+    .spacer { height: 60px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -199,10 +199,10 @@ if st.session_state.search_performed:
 st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://www.onsafe.co.kr" target="_blank" class="link-btn">👮 법정필수/경비직무 교육 (온세이프)</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://www.onsafe.co.kr" target="_blank" class="link-btn">👮 법정필수/경비직무 교육 (온세이프)</a>', unsafe_allow_html=True)
 
 st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
