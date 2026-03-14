@@ -83,10 +83,14 @@ st.markdown("""
     .open-room-note { font-size: 14px !important; color: #444; line-height: 1.4; background: #eee; padding: 5px 8px; border-radius: 4px; }
     
     .top-btn { position:fixed; bottom:80px; right:20px; z-index:999; }
+    
+    /* 링크 스타일 수정: 테두리 박스 제거 및 텍스트 중앙 정렬 */
     .link-btn {
-        display: block; padding: 14px; margin-bottom: 8px; background: #F0F4F8; color: #1E3A5F !important;
-        text-decoration: none; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
+        display: block; padding: 12px; margin-bottom: 2px; color: #1E3A5F !important;
+        text-decoration: none; font-weight: bold; text-align: center; font-size: 15px;
+        border-bottom: 1px solid #F0F0F0;
     }
+    .link-btn:last-child { border-bottom: none; }
     .spacer { height: 100px; }
 </style>
 """, unsafe_allow_html=True)
@@ -199,14 +203,14 @@ if st.session_state.search_performed:
         </script>
     """, height=0)
 
-# 7. 자주 찾는 링크 (경비교육 포함)
+# 7. 자주 찾는 링크 (경비교육 수정 및 박스 제거)
 st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://www.ksst.or.kr/" target="_blank" class="link-btn">👮 경비교육 (한국경비협회)</a>', unsafe_allow_html=True)
+    st.markdown('<a href="https://www.onsafe.co.kr" target="_blank" class="link-btn">👮 법정필수/경비직무 교육 (온세이프)</a>', unsafe_allow_html=True)
 
 st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
