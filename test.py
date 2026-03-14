@@ -80,17 +80,18 @@ st.markdown("""
     
     .top-btn { position:fixed; bottom:80px; right:20px; z-index:999; }
     
-    /* 🔗 링크 사이 간격 최적화 */
+    /* 🔗 링크 사이 간격 최적화 (강의실 개방 지침 스타일) */
     .link-btn {
         display: block; 
-        padding: 5px 0;    /* 위아래 여백을 14px에서 5px로 대폭 축소 */
-        margin-bottom: 0;  /* 아래쪽 바깥 여백 제거 */
+        padding: 2px 0 !important;   /* 위아래 여백 최소화 */
+        margin: 0 !important;        /* 바깥 여백 제거 */
         color: #1E3A5F !important;
         text-decoration: none; 
         font-weight: bold; 
         text-align: center; 
-        font-size: 15px;
-        border: none !important; /* 박스 테두리 완벽 제거 */
+        font-size: 14px;             /* 가독성을 위해 살짝 조절 */
+        line-height: 1.4 !important; /* 강의실 개방 지침과 동일한 줄간격 */
+        border: none !important;
     }
     .spacer { height: 10px; }
 </style>
@@ -195,14 +196,17 @@ if st.session_state.search_performed:
 
     components.html("""<script>setTimeout(function() {window.parent.document.getElementById('result-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});}, 300);</script>""", height=0)
 
-# 7. 자주 찾는 링크 (여백 최소화 적용)
+# 7. 자주 찾는 링크 (강의실 개방 지침처럼 촘촘하게 수정)
 st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
-    st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">🔐 S-CUBE 통합인증</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
-    st.markdown('<a href="https://www.onsafe.co.kr" target="_blank" class="link-btn">👮 법정필수/경비직무 교육 (온세이프)</a>', unsafe_allow_html=True)
+    # 각 링크 앞에 가독성을 위해 작은 점(•)을 추가했습니다.
+    st.markdown(f'''
+        <a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">• 🏫 대관신청 현황</a>
+        <a href="https://scube.s-tec.co.kr/sso/user/login/view" target="_blank" class="link-btn">• 🔐 S-CUBE 통합인증</a>
+        <a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">• 📂 개인정보관리</a>
+        <a href="https://todayshift.com/" target="_blank" class="link-btn">• 📅 오늘근무</a>
+        <a href="https://www.onsafe.co.kr" target="_blank" class="link-btn">• 👮 법정필수/경비직무 교육 (온세이프)</a>
+    ''', unsafe_allow_html=True)
 
 st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
