@@ -11,7 +11,18 @@ def today_kst(): return datetime.now(KST).date()
 
 st.set_page_config(page_title="성의교정 대관 조회(M)", page_icon="🏫", layout="centered")
 
-# 요일/근무조 로직 (동일)
+# 2. 세션 상태 초기화 (에러 방지 핵심)
+if 'target_date' not in st.session_state:
+    url_d = st.query_params.get("d")
+    if url_d:
+        try: st.session_state.target_date = datetime.strptime(url_d, "%Y-%m-%d").date()
+        except: st.session_state.target_date = today_kst()
+    else: st.session_state.target_date = today_kst()
+
+if 'search_performed' not in st.session_state:
+    st.session_state.search_performed = True if st.query_params.get("d") else False
+
+# 요일/근무조 로직
 def get_weekday_names(codes):
     days = {"1":"월", "2":"화", "3":"수", "4":"목", "5":"금", "6":"토", "7":"일"}
     if not codes: return ""
@@ -23,7 +34,7 @@ def get_work_shift(d):
     shifts = [{"n": "A조", "bg": "#FF9800"}, {"n": "B조", "bg": "#E91E63"}, {"n": "C조", "bg": "#2196F3"}]
     return shifts[diff % 3]
 
-# 2. CSS 스타일 (간결함/좁은 줄간격 핵심)
+# 3. CSS 스타일 (간결함 유지)
 st.markdown("""
 <style>
     #top-anchor { position: absolute; top: 0; left: 0; }
@@ -32,13 +43,10 @@ st.markdown("""
     .main-title { font-size: 20px !important; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 10px !important; }
     .stCheckbox { margin: -15px 0 !important; transform: scale(0.9); }
     .sat { color: #0000FF !important; } .sun { color: #FF0000 !important; }
-    
-    /* 결과 박스 및 네비게이션 압축 */
     .date-display-box { 
         text-align: center; background-color: #F8FAFF; padding: 8px 5px 5px 5px; 
         border-radius: 8px 8px 0 0; border: 1px solid #D1D9E6; border-bottom: none; line-height: 1.1 !important;
     }
-    .res-main-title { font-size: 16px !important; font-weight: 800; color: #1E3A5F; display: block; }
     .res-sub-title { font-size: 15px !important; font-weight: 700; color: #333; }
     .nav-link-bar {
         display: flex !important; width: 100% !important; background: white !important; 
@@ -50,22 +58,16 @@ st.markdown("""
         text-decoration: none !important; color: #1E3A5F !important; font-weight: bold !important; 
         border-right: 1px solid #F0F0F0 !important; font-size: 12px !important;
     }
-    
-    /* 카드 및 텍스트 줄간격 최소화 */
     .building-header { font-size: 16px !important; font-weight: bold; color: #2E5077; margin-top: 10px; border-bottom: 1px solid #2E5077; padding-bottom: 2px; margin-bottom: 8px; }
     .section-title { font-size: 13px; font-weight: bold; color: #555; margin: 5px 0 3px 0; padding-left: 5px; border-left: 3px solid #ccc; }
     .event-card { border: 1px solid #E0E0E0; border-left: 4px solid #2E5077; padding: 8px 10px; border-radius: 4px; margin-bottom: 6px !important; background-color: #ffffff; line-height: 1.2 !important; }
     .status-badge { display: inline-block; padding: 1px 5px; font-size: 10px; border-radius: 4px; font-weight: bold; float: right; }
     .bottom-info { font-size: 11px; color: #666; margin-top: 4px; display: flex; justify-content: space-between; border-top: 1px solid #f9f9f9; padding-top: 3px; }
-    
-    /* 개방 지침 압축 */
     .open-card { border: 1px dashed #2E5077; padding: 10px; border-radius: 8px; margin-bottom: 10px; background-color: #F8FAFF; line-height: 1.2; }
     .open-bu-title { font-weight: 800; color: #2E5077; font-size: 15px !important; margin-bottom: 5px; border-bottom: 1px solid #D1D9E6; }
     .open-room-name { font-weight: bold; color: #333; font-size: 14px !important; }
     .open-room-time { font-size: 13px !important; color: #FF4B4B; font-weight: bold; }
     .open-room-note { font-size: 12px !important; color: #555; background: #eee; padding: 2px 5px; border-radius: 3px; }
-    
-    /* 링크 버튼 슬림화 */
     .link-btn {
         display: block; padding: 8px; margin-bottom: 4px; background: #F0F4F8; color: #1E3A5F !important;
         text-decoration: none; border-radius: 6px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 13px;
@@ -78,22 +80,16 @@ st.markdown("""
 st.markdown('<div id="top-anchor"></div>', unsafe_allow_html=True)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-# 3. 입력부 (폼 여백 축소)
+# 4. 입력부
 with st.form("search_form"):
     selected_date = st.date_input("날짜", value=st.session_state.target_date, label_visibility="collapsed")
-    c1, c2 = st.columns(2)
-    with c1: st.markdown('<p style="font-size:13px; font-weight:bold; margin:0;">🏢 건물 선택</p>', unsafe_allow_html=True)
-    with c2: st.markdown('<p style="font-size:13px; font-weight:bold; margin:0;">🗓️ 유형</p>', unsafe_allow_html=True)
-    
-    # 건물 선택용 멀티 컬럼 배치 (공간 절약)
-    ALL_BU = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스 파크 의과대학", "옴니버스 파크 간호대학", "대학본관", "서울성모별관"]
     col_a, col_b = st.columns(2)
+    ALL_BU = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스 파크 의과대학", "옴니버스 파크 간호대학", "대학본관", "서울성모별관"]
     selected_bu_list = []
     for i, bu in enumerate(ALL_BU):
         with (col_a if i % 2 == 0 else col_b):
             if st.checkbox(bu, value=(bu in ["성의회관", "의생명산업연구원"]), key=f"f_{bu}"):
                 selected_bu_list.append(bu)
-    
     show_t = col_a.checkbox("당일", value=True, key="chk_t")
     show_p = col_b.checkbox("기간", value=True, key="chk_p")
     
@@ -103,7 +99,7 @@ with st.form("search_form"):
         st.query_params["d"] = selected_date.strftime("%Y-%m-%d")
         st.rerun()
 
-# 4. 데이터 로직 (생략)
+# 데이터 로드 로직 (동일)
 @st.cache_data(ttl=300)
 def get_data(d):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -163,14 +159,14 @@ if st.session_state.search_performed:
                             """, unsafe_allow_html=True)
         if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:5px; font-size:11px;">내역 없음</div>', unsafe_allow_html=True)
 
-    # 6. 개방 지침 (초압축)
+    # 6. 개방 지침
     st.markdown("<div class=\"building-header\">🔓 개방 지침</div>", unsafe_allow_html=True)
     sh_list = []
     if not is_weekend:
         sh_list.append({"r": "421~522호", "t": "주중 오전개방", "n": "퇴실독촉 금지"})
-        if date(d.year, 3, 2) <= d <= date(d.year, 4, 30):
+        if date(2026, 3, 2) <= d <= date(2026, 4, 30):
             sh_list.append({"r": "402~407호", "t": "08:00~20:00", "n": "첫/끝순찰 개폐"})
-    if date(d.year, 2, 7) <= d <= date(d.year, 4, 24):
+    if date(2026, 2, 7) <= d <= date(2026, 4, 24):
         sh_list.append({"r": "801호", "t": "09:00~21:00", "n": "평일:직원개방/야간폐쇄"})
     
     if sh_list:
@@ -181,15 +177,9 @@ if st.session_state.search_performed:
 
     components.html("""<script>setTimeout(function() {window.parent.document.getElementById('result-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});}, 300);</script>""", height=0)
 
-# 7. 링크 메뉴 (최대한 좁게)
+# 7. 빠른 링크
 with st.expander("🔗 빠른 링크", expanded=False):
-    links = [
-        ("🏫 대관신청", "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"),
-        ("🔐 S-CUBE", "https://scube.s-tec.co.kr/sso/user/login/view"),
-        ("📂 개인정보", "https://pms.s-tec.co.kr/mainfrm.php"),
-        ("📅 오늘근무", "https://todayshift.com/"),
-        ("👮 경비교육", "https://www.ksst.or.kr/")
-    ]
+    links = [("🏫 대관신청", "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"), ("🔐 S-CUBE", "https://scube.s-tec.co.kr/sso/user/login/view"), ("📂 개인정보", "https://pms.s-tec.co.kr/mainfrm.php"), ("📅 오늘근무", "https://todayshift.com/"), ("👮 경비교육", "https://www.ksst.or.kr/")]
     for name, url in links:
         st.markdown(f'<a href="{url}" target="_blank" class="link-btn">{name}</a>', unsafe_allow_html=True)
 
