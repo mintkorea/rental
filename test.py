@@ -171,8 +171,7 @@ with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
 
-# 하단 여백 추가 (스크롤 가려짐 방지)
-st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
+
 
 
  # 개방 지침
