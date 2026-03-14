@@ -174,14 +174,3 @@ with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
 # 하단 여백 추가 (스크롤 가려짐 방지)
 st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
 
-
-    components.html("""
-        <script>
-            setTimeout(function() {
-                window.parent.document.getElementById('result-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});
-            }, 300);
-        </script>
-    """, height=0)
-
-for _ in range(3): st.write("")
-st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
