@@ -76,16 +76,13 @@ st.markdown("""
     .status-y { background-color: #FFF4E5; color: #B25E09; } .status-n { background-color: #E8F0FE; color: #1967D2; }
     .bottom-info { font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between; border-top: 1px solid #f0f0f0; padding-top: 6px; align-items: center; }
     
-    /* 개방 지침 스타일 */
     .open-card { border: 2px dashed #2E5077; padding: 15px; border-radius: 10px; margin-bottom: 15px; background-color: #F8FAFF; }
     .open-bu-title { font-weight: 800; color: #2E5077; font-size: 19px !important; margin-bottom: 10px; border-bottom: 2px solid #D1D9E6; }
     .open-room-name { font-weight: bold; color: #333; font-size: 17px !important; margin-bottom: 3px; }
     .open-room-time { font-size: 16px !important; color: #FF4B4B; font-weight: bold; margin-bottom: 5px; }
     .open-room-note { font-size: 14px !important; color: #444; line-height: 1.4; background: #eee; padding: 5px 8px; border-radius: 4px; }
     
-    /* 플로팅 TOP 버튼 */
     .top-btn { position:fixed; bottom:80px; right:20px; z-index:999; }
-    
     .link-btn {
         display: block; padding: 14px; margin-bottom: 8px; background: #F0F4F8; color: #1E3A5F !important;
         text-decoration: none; border-radius: 10px; font-weight: bold; text-align: center; border: 1px solid #D1D9E6; font-size: 15px;
@@ -125,7 +122,9 @@ def get_data(d):
 
 # 5. 결과 출력
 if st.session_state.search_performed:
+    # 여기가 검색 결과로 올려주는 앵커 지점입니다
     st.markdown('<div id="result-anchor"></div>', unsafe_allow_html=True)
+    
     d = st.session_state.target_date
     df_raw = get_data(d)
     shift = get_work_shift(d)
@@ -175,7 +174,7 @@ if st.session_state.search_performed:
                             """, unsafe_allow_html=True)
         if not has_content: st.markdown('<div style="color:#999; text-align:center; padding:15px; border:1px dashed #eee; font-size:13px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 
-    # 6. 개방 지침 (검색 결과 하단에 배치)
+    # 6. 개방 지침
     st.markdown("<br><div class=\"building-header\">🔓 강의실 개방 일람/지침</div>", unsafe_allow_html=True)
     sh_list = []
     if not is_weekend:
@@ -193,7 +192,16 @@ if st.session_state.search_performed:
     bg_status = "월~금: 오전 개방 / 오후 폐쇄" if not is_weekend else "주말: 대관 확인 후 개방"
     st.markdown(f"""<div class="open-card"><div class="open-bu-title">🏢 서울성모별관</div><div class="open-room-name">• 1201, 1202, 1203, 1204, 1205, 1206호</div><div class="open-room-time">⏰ {bg_status}</div><div class="open-room-note">{"1206호(금) 10시 교육 예정" if d.isoweekday()==5 else "평일/주말 순찰 지침 준수"}</div></div>""", unsafe_allow_html=True)
 
-# 7. 자주 찾는 링크 (익스팬더)
+    # 검색 결과로 위로 밀어올려주는 자동 스크립트
+    components.html("""
+        <script>
+            setTimeout(function() {
+                window.parent.document.getElementById('result-anchor').scrollIntoView({behavior: 'smooth', block: 'start'});
+            }, 300);
+        </script>
+    """, height=0)
+
+# 7. 자주 찾는 링크
 st.markdown("<br>", unsafe_allow_html=True)
 with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do" target="_blank" class="link-btn">🏫 대관신청 현황</a>', unsafe_allow_html=True)
@@ -201,6 +209,5 @@ with st.expander("🔗 자주 찾는 홈페이지 (열기)", expanded=False):
     st.markdown('<a href="https://pms.s-tec.co.kr/mainfrm.php" target="_blank" class="link-btn">📂 개인정보관리</a>', unsafe_allow_html=True)
     st.markdown('<a href="https://todayshift.com/" target="_blank" class="link-btn">📅 오늘근무</a>', unsafe_allow_html=True)
 
-# 여백 및 플로팅 TOP 버튼
 st.markdown('<div class="spacer"></div>', unsafe_allow_html=True)
 st.markdown("""<div class="top-btn"><a href="#top-anchor" style="display:block; background:#1E3A5F; color:white !important; width:45px; height:45px; line-height:45px; text-align:center; border-radius:50%; font-size:12px; font-weight:bold; text-decoration:none !important; box-shadow:2px 4px 8px rgba(0,0,0,0.3);">TOP</a></div>""", unsafe_allow_html=True)
