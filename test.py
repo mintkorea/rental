@@ -92,7 +92,7 @@ st.markdown("""
         font-size: 15px;
         border: none !important; /* 박스 테두리 완벽 제거 */
     }
-    .spacer { height: 60px; }
+    .spacer { height: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
