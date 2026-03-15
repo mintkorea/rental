@@ -8,46 +8,44 @@ import io
 # 1. 페이지 설정
 st.set_page_config(page_title="성희교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. 통합 CSS (정렬, 개행, 버튼 스타일)
+# 2. 통합 CSS (너비 고정 및 레이아웃 최적화)
 st.markdown("""
     <style>
     .block-container { padding-top: 5rem !important; max-width: 95% !important; margin: 0 auto !important; }
     
-    /* 표 스타일 강제 적용 */
-    div[data-testid="stTable"] table { width: 100% !important; }
-    div[data-testid="stTable"] th { 
-        text-align: center !important; 
-        background-color: #f0f2f6 !important; 
-        font-weight: bold !important;
+    /* 가로 모드 표 스타일: 너비 고정 및 정렬 */
+    .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 20px; }
+    .custom-table th, .custom-table td { 
+        border: 1px solid #ddd; padding: 10px; font-size: 14px; 
+        overflow: hidden; text-overflow: ellipsis; word-break: break-all;
     }
-    div[data-testid="stTable"] td { 
-        vertical-align: middle !important; 
-        line-height: 1.5 !important;
-        white-space: normal !important; 
-        word-break: keep-all !important;
+    .custom-table th { background-color: #f0f2f6; font-weight: bold; text-align: center; }
+    
+    /* 열별 너비 및 정렬 설정 */
+    .col-no { width: 40px; text-align: center; }
+    .col-place { width: 15%; text-align: left; }
+    .col-time { width: 120px; text-align: center; }
+    .col-event { width: 35%; text-align: left; }
+    .col-dept { width: 20%; text-align: left; }
+    .col-status { width: 60px; text-align: center; }
+
+    /* 세로 모드 카드 스타일 */
+    .mobile-card { 
+        padding: 15px; border: 1px solid #eee; border-radius: 8px; 
+        margin-bottom: 10px; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    /* 시간(2번), 상태(5번) 열 중앙 정렬 */
-    div[data-testid="stTable"] td:nth-child(2),
-    div[data-testid="stTable"] td:nth-child(5) { text-align: center !important; }
+    .card-place { font-size: 16px; font-weight: bold; color: #1e3a5f; margin-bottom: 5px; }
+    .card-time-status { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+    .card-info { font-size: 13px; color: #666; line-height: 1.4; }
+    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; }
 
     .main-header { font-size: 24px; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px; }
     .date-shift-bar { background-color: #444; color: white; padding: 12px; border-radius: 8px; text-align: center; margin: 20px 0 10px 0; font-weight: bold; }
-    .building-header { border-bottom:2px solid #1e3a5f; padding:5px 0; margin-top:20px; font-weight: bold; color: #1e3a5f; font-size: 18px; }
-    
-    /* 다운로드 버튼 강조 */
-    div.stDownloadButton > button { 
-        width: 100%; 
-        background-color: #1e3a5f !important; 
-        color: white !important; 
-        padding: 12px !important; 
-        border-radius: 8px !important; 
-        font-weight: bold !important;
-        margin-top: 10px;
-    }
+    .building-header { padding:10px 0; margin-top:15px; font-weight: bold; color: #1e3a5f; font-size: 18px; display: flex; align-items: center; gap: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
-# [3. 데이터 로직 및 엑셀 생성 함수] - 기존과 동일하게 유지
+# [데이터 로직 및 엑셀 생성 생략 - 기존과 동일]
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -85,35 +83,20 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 엑셀 다운로드 함수 (기존 코드 사용)
-def create_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='대관현황')
-    return output.getvalue()
-
-# 4. 사이드바 구성 (버튼 소실 해결)
+# 4. 사이드바 및 본문 구성
 with st.sidebar:
-    st.header("⚙️ 설정 및 도구")
+    st.header("⚙️ 설정")
     view_mode = st.radio("📱 보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"], index=1)
     s_date = st.date_input("조회 시작일", value=now_today)
     e_date = st.date_input("조회 종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    
-    # 데이터 먼저 가져오기
     df_result = get_data(s_date, e_date)
-    
-    st.markdown("---")
-    # 결과 데이터가 있을 때만 다운로드 버튼 표시
     if not df_result.empty:
-        st.download_button(
-            label="📥 엑셀 결과 다운로드",
-            data=create_excel(df_result),
-            file_name=f"대관현황_{s_date}.xlsx",
-            use_container_width=True
-        )
+        # 간단 엑셀 다운로드 (생략 가능)
+        output = io.BytesIO()
+        df_result.to_excel(output, index=False)
+        st.download_button("📥 엑셀 다운로드", output.getvalue(), f"대관현황_{s_date}.xlsx", use_container_width=True)
 
-# 5. 본문 영역
 st.markdown('<div class="main-header">📋 성희교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 if not df_result.empty:
@@ -123,20 +106,41 @@ if not df_result.empty:
         for bu in sel_bu:
             b_df = df_result[(df_result['full_date'] == d_str) & (df_result['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             if not b_df.empty:
-                st.markdown(f'<div class="building-header">🏢 {bu} (총 {len(b_df)}건)</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="building-header">🏢 {bu} <span style="font-size:14px; color:#666; margin-left:10px;">(총 {len(b_df)}건)</span></div>', unsafe_allow_html=True)
+                
                 if view_mode == "가로 모드 (표)":
-                    st.table(b_df[['장소', '시간', '행사명', '부서', '상태']])
-                else:
+                    # HTML 테이블 직접 생성 (너비 및 정렬 완벽 제어)
+                    table_html = f"""
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No</th><th class="col-place">장소</th><th class="col-time">시간</th>
+                                <th class="col-event">행사명</th><th class="col-dept">부서</th><th class="col-status">상태</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    """
+                    for idx, (_, r) in enumerate(b_df.iterrows(), 1):
+                        table_html += f"""
+                            <tr>
+                                <td class="col-no">{idx}</td><td class="col-place">{r['장소']}</td><td class="col-time">{r['시간']}</td>
+                                <td class="col-event">{r['행사명']}</td><td class="col-dept">{r['부서']}</td><td class="col-status">{r['상태']}</td>
+                            </tr>
+                        """
+                    table_html += "</tbody></table>"
+                    st.markdown(table_html, unsafe_allow_html=True)
+                
+                else: # 세로 모드 (카드)
                     for _, r in b_df.iterrows():
                         bg = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
                         st.markdown(f'''
-                            <div style="padding:12px 0; border-bottom:1px solid #eee;">
-                                <div style="display:flex; justify-content:space-between;">
-                                    <span style="font-weight:bold;">📍 {r["장소"]}</span>
-                                    <span style="padding:2px 8px; border-radius:4px; font-size:11px; font-weight:bold; color:white; background-color:{bg};">{r["상태"]}</span>
+                            <div class="mobile-card">
+                                <div class="card-place">📍 {r["장소"]}</div>
+                                <div class="card-time-status">
+                                    <span style="color:#e74c3c; font-weight:bold; font-size:14px;">🕒 {r["시간"]}</span>
+                                    <span class="status-badge" style="background-color:{bg};">{r["상태"]}</span>
                                 </div>
-                                <div style="color:#e74c3c; font-size:13px; font-weight:bold; margin:4px 0;">🕒 {r["시간"]}</div>
-                                <div style="font-size:13px; color:#444;">📄 {r["행사명"]} | {r["부서"]}</div>
+                                <div class="card-info">📄 {r["행사명"]} | {r["부서"]}</div>
                             </div>
                         ''', unsafe_allow_html=True)
 else:
