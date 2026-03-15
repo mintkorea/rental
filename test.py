@@ -4,37 +4,42 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 import io
-from streamlit_javascript import st_javascript
 
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. 화면 너비 감지 (중복 출력 방지의 핵심)
-# st_javascript를 사용하여 현재 브라우저의 너비를 정수로 가져옵니다.
-ui_width = st_javascript("window.innerWidth")
-
-# 3. 통합 디자인 CSS
+# 2. CSS 미디어 쿼리 (가로/세로 디자인 자동 스위칭 핵심)
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; max-width: 1100px !important; margin: 0 auto !important; }
     .main-title { font-size: 21px !important; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; }
     
-    /* 건물 헤더 및 내역 없음 박스 */
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:20px; }
     .count-text { font-size: 14px; font-weight: bold; }
+    
     .no-data-box { 
         background-color: #f8f9fa; color: #666; padding: 15px; 
         border-radius: 8px; text-align: center; font-size: 13px; 
         margin-top: 10px; border: 1px solid #eee;
     }
 
-    /* 카드 디자인 (세로 모드용) */
+    /* 카드 디자인 (세로용) */
     .mobile-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
     .card-first-line { display: flex; justify-content: space-between; align-items: center; }
     .place-name { font-weight: bold; color: #333; font-size: 14px; }
     .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; }
     .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; margin-left:5px; }
-    .card-second-line { font-size: 11px; color: #888; margin-top: 4px; line-height: 1.4; }
+    .card-second-line { font-size: 11px; color: #888; margin-top: 4px; }
+
+    /* [중복 방지 핵심] 화면 너비에 따른 노출 제어 */
+    /* 768px 이상(가로모드/PC)에서는 카드 숨기기 */
+    @media (min-width: 768px) {
+        div[data-testid="stVerticalBlock"] > div.mobile-container { display: none !important; }
+    }
+    /* 767px 이하(세로모드)에서는 표 숨기기 */
+    @media (max-width: 767px) {
+        div[data-testid="stVerticalBlock"] > div.pc-table-container { display: none !important; }
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -87,7 +92,6 @@ with st.sidebar:
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    st.info(f"현재 화면 너비: {ui_width}px")
 
 st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
@@ -116,28 +120,29 @@ while curr_day <= e_date:
         st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
         
         if not b_df.empty:
-            # [최종 해결책] 너비가 700px 이상이면 표(Table), 아니면 카드(Card)만 하나만 렌더링
-            if ui_width is not None and ui_width >= 700:
-                # 가로 모드 및 PC: 표 형태
-                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
-            else:
-                # 세로 모드: 카드 형태
-                for _, r in b_df.iterrows():
-                    bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
-                    st.markdown(f"""
-                        <div class="mobile-card">
-                            <div class="card-first-line">
-                                <div class="place-name">📍 {r['장소']}</div>
-                                <div class="status-right">
-                                    <span class="time-text">🕒 {r['시간']}</span>
-                                    <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
-                                </div>
+            # 1. 표 형식 (가로모드용/PC용) - CSS로 모바일에서 숨김
+            st.markdown('<div class="pc-table-container">', unsafe_allow_html=True)
+            st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # 2. 카드 형식 (세로모드용) - CSS로 PC에서 숨김
+            st.markdown('<div class="mobile-container">', unsafe_allow_html=True)
+            for _, r in b_df.iterrows():
+                bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
+                st.markdown(f"""
+                    <div class="mobile-card">
+                        <div class="card-first-line">
+                            <div class="place-name">📍 {r['장소']}</div>
+                            <div class="status-right">
+                                <span class="time-text">🕒 {r['시간']}</span>
+                                <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
                             </div>
-                            <div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div>
                         </div>
-                    """, unsafe_allow_html=True)
+                        <div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
-            # 내역 없음 표출
             st.markdown(f'<div class="no-data-box">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
             
     curr_day += timedelta(days=1)
