@@ -8,21 +8,19 @@ import io
 # 1. 페이지 설정
 st.set_page_config(page_title="성희교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. CSS - 가로 모드 표 정렬 및 세로 모드 카드 레이아웃 완벽 고정
+# 2. 통합 CSS (카드 레이아웃 고정 및 표 인덱스 숨김)
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; max-width: 95% !important; }
     
-    /* [가로 모드] 표 스타일: No 없이 필수 5개 열만 깔끔하게 출력 */
+    /* 가로 모드 표: 인덱스(No) 열을 강제로 숨기고 너비 최적화 */
+    div[data-testid="stTable"] thead tr th:first-child { display: none !important; }
+    div[data-testid="stTable"] tbody tr td:first-child { display: none !important; }
     div[data-testid="stTable"] table { width: 100% !important; }
-    div[data-testid="stTable"] th { 
-        background-color: #f0f2f6 !important; 
-        text-align: center !important; 
-        font-weight: bold !important; 
-    }
+    div[data-testid="stTable"] th { background-color: #f0f2f6 !important; text-align: center !important; }
     div[data-testid="stTable"] td { vertical-align: middle !important; padding: 12px !important; }
 
-    /* [세로 모드] 카드 레이아웃: 장소 / 시간+상태 / 행사명+부서 순 */
+    /* 세로 모드 카드: 스크린샷 디자인 완벽 복구 */
     .mobile-card { 
         background: white; border: 1px solid #e1e4e8; border-radius: 12px; 
         padding: 18px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.06);
@@ -39,7 +37,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로직 및 엑셀 유틸리티
+# 3. 데이터 및 엑셀 로직 (안정화 버전)
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -75,21 +73,22 @@ def get_data(start_date, end_date):
                     })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
-    except: return pd.DataFrame()
+    except Exception as e:
+        return pd.DataFrame()
 
-def to_excel_formatted(df):
+def to_excel_file(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='대관현황')
+        df.to_excel(writer, index=False, sheet_name='현황')
         workbook = writer.book
-        worksheet = writer.sheets['대관현황']
-        header_format = workbook.add_format({'bold': True, 'bg_color': '#DDEBF7', 'border': 1, 'align': 'center'})
-        for col_num, value in enumerate(df.columns.values):
-            worksheet.write(0, col_num, value, header_format)
+        worksheet = writer.sheets['현황']
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#DDEBF7', 'border': 1, 'align': 'center'})
+        for col_num, col_val in enumerate(df.columns.values):
+            worksheet.write(0, col_num, col_val, header_fmt)
             worksheet.set_column(col_num, col_num, 22)
     return output.getvalue()
 
-# 4. 사이드바 - 설정 및 엑셀 다운로드 버튼 고정
+# 4. 사이드바 제어
 with st.sidebar:
     st.header("⚙️ 검색 설정")
     view_mode = st.radio("보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"], index=0)
@@ -100,9 +99,9 @@ with st.sidebar:
     df_res = get_data(s_date, e_date)
     if not df_res.empty:
         st.markdown("---")
-        st.download_button("📥 엑셀 다운로드", to_excel_formatted(df_res), f"대관현황_{s_date}.xlsx", use_container_width=True)
+        st.download_button("📥 엑셀 다운로드", to_excel_file(df_res), f"대관현황_{s_date}.xlsx", use_container_width=True)
 
-# 5. 메인 화면 출력
+# 5. 메인 뷰
 st.markdown('<div class="main-header">📋 성희교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 if not df_res.empty:
@@ -116,14 +115,23 @@ if not df_res.empty:
                 st.markdown(f'<div class="bu-title">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
                 
                 if view_mode == "가로 모드 (표)":
-                    # [가로 모드] No 열 없이 원하시는 5개 컬럼만 출력
+                    # CSS로 인덱스를 숨겼으므로 안전하게 5개 열만 표시
                     st.table(b_df[['장소', '시간', '행사명', '부서', '상태']])
                 else:
-                    # [세로 모드] 카드 레이아웃 완벽 복구 (시간이 상태 앞으로)
                     for _, r in b_df.iterrows():
-                        bg = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
+                        color = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
                         st.markdown(f'''
                             <div class="mobile-card">
                                 <div class="card-place">📍 {r["장소"]}</div>
                                 <div class="card-time-status">
-                                    <span class="card-
+                                    <span class="card-time">🕒 {r["시간"]}</span>
+                                    <span class="status-badge" style="background-color:{color};">{r["상태"]}</span>
+                                </div>
+                                <div class="card-info">
+                                    <b>행사:</b> {r["행사명"]}<br>
+                                    <b>부서:</b> {r["부서"]}
+                                </div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+else:
+    st.info("조회된 내역이 없습니다.")
