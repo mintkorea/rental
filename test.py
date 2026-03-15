@@ -132,3 +132,4 @@ if not df.empty:
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
 else:
     st.info("조회된 내역이 없습니다.")
+
