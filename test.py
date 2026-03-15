@@ -17,16 +17,27 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일 (f-string 에러 방지를 위해 일반 문자열 사용)
+# 2. CSS 스타일: 장소명 1줄 고정 및 레이아웃 최적화
 st.markdown("""
 <style>
     .event-shell { border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }
-    .row-main { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .col-place { flex: 5; font-size: 15px; font-weight: 700; color: #1e3a5f; }
-    .col-time { flex: 3.5; font-size: 14px; color: #d9534f; font-weight: bold; text-align: center; }
-    .col-status { flex: 1.5; font-size: 13px; font-weight: bold; text-align: right; }
+    .row-main { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
+    
+    /* [지적사항 반영] 장소명 1줄 고정 및 말줄임 처리 */
+    .col-place { 
+        flex: 5.5; 
+        font-weight: 700; 
+        color: #1e3a5f; 
+        white-space: nowrap; 
+        overflow: hidden; 
+        text-overflow: ellipsis; 
+        display: block;
+    }
+    
+    .col-time { flex: 3; font-size: 13px; color: #d9534f; font-weight: bold; text-align: center; white-space: nowrap; }
+    .col-status { flex: 1.5; font-size: 12px; font-weight: bold; text-align: right; }
     .row-sub { font-size: 13px; color: #666; margin-top: 6px; }
-    .main-title { font-size: 2.2rem; font-weight: 900; color: #1e3a5f; text-align: center; margin-bottom: 20px; line-height: 1.2; }
+    .main-title { font-size: 2.2rem; font-weight: 900; color: #1e3a5f; text-align: center; margin-bottom: 20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,74 +74,26 @@ def get_data(start_date, end_date):
                             '행사명': item.get('eventNm', '') or '-',
                             '부서': item.get('mgDeptNm', '') or '-',
                             '인원': str(item.get('peopleCount', '0')),
-                            '부스': str(item.get('boothCount', '0')),
                             '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-def create_formatted_excel(df, selected_buildings):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('대관현황')
-        worksheet.set_landscape()
-        
-        hdr = workbook.add_format({'bold':True, 'font_size':12, 'bg_color':'#333333', 'font_color':'white', 'align':'center', 'valign':'vcenter', 'border':1})
-        bu_f = workbook.add_format({'bold':True, 'font_size':11, 'bg_color':'#EBF1F8', 'align':'left', 'valign':'vcenter', 'border':1})
-        l_f = workbook.add_format({'border':1, 'align':'left', 'valign':'vcenter', 'text_wrap':True, 'shrink':True})
-        c_f = workbook.add_format({'border':1, 'align':'center', 'valign':'vcenter', 'shrink':True})
-
-        curr_row = 1
-        for d_str in sorted(df['full_date'].unique()):
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.set_row(curr_row, 35)
-            header_text = "📅 {0} | 근무조: {1}".format(d_str, get_shift(d_obj))
-            worksheet.merge_range(curr_row, 0, curr_row, 6, header_text, hdr)
-            curr_row += 1
-            for bu in BUILDING_ORDER:
-                if bu in selected_buildings:
-                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
-                    if not b_df.empty:
-                        worksheet.set_row(curr_row, 35)
-                        worksheet.merge_range(curr_row, 0, curr_row, 6, "  📍 " + bu, bu_f)
-                        curr_row += 1
-                        for _, r in b_df.iterrows():
-                            worksheet.set_row(curr_row, 35)
-                            worksheet.write(curr_row, 0, r['장소'], l_f)
-                            worksheet.write(curr_row, 1, r['시간'], c_f)
-                            worksheet.write(curr_row, 2, r['행사명'], l_f)
-                            worksheet.write(curr_row, 3, r['부서'], l_f)
-                            worksheet.write(curr_row, 4, r['인원'], c_f)
-                            worksheet.write(curr_row, 5, r['부스'], c_f)
-                            worksheet.write(curr_row, 6, r['상태'], c_f)
-                            curr_row += 1
-                        curr_row += 1
-        worksheet.set_column('A:A', 20)
-        worksheet.set_column('B:B', 12)
-        worksheet.set_column('C:C', 35)
-        worksheet.set_column('D:D', 18)
-        worksheet.set_column('E:G', 7)
-    return output.getvalue()
-
 # 4. 화면 구성
 st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("🔍 설정")
-    view_mode = st.radio("📺 보기 모드 선택", ["PC 모드", "모바일(세로)", "모바일(가로)"], index=0)
+    view_mode = st.radio("📺 보기 모드 선택", ["PC 모드", "모바일(세로)", "모바일(가로)"], index=1)
     col1, col2 = st.columns(2)
     with col1: s_date = st.date_input("시작일", value=now_today)
     with col2: e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["옴니버스 파크"])
 
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    excel_data = create_formatted_excel(df, sel_bu)
-    st.download_button("📥 엑셀 다운로드", data=excel_data, file_name="대관현황.xlsx", use_container_width=True)
-
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
         date_header = '<div style="background-color:#444; color:white; padding:10px; border-radius:5px; margin-top:20px; font-weight:bold;">'
@@ -141,26 +104,29 @@ if not df.empty:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
             if not b_df.empty:
                 badge = '<span style="background-color:#e1e8f0; padding:2px 10px; border-radius:15px; font-size:14px; font-weight:bold; color:black;">총 {0}건</span>'.format(len(b_df))
-                bu_title = '<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a5f; margin-top:15px; padding-bottom:5px;">'
-                bu_title += '<h3 style="margin:0; color:#1e3a5f;">🏢 {0}</h3>{1}</div>'.format(bu, badge)
-                st.markdown(bu_title, unsafe_allow_html=True)
+                st.markdown('<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a5f; margin-top:15px; padding-bottom:5px;"><h3 style="margin:0; color:#1e3a5f;">🏢 {0}</h3>{1}</div>'.format(bu, badge), unsafe_allow_html=True)
                 
-                if view_mode == "PC 모드":
-                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
-                elif view_mode == "모바일(세로)":
+                if view_mode == "모바일(세로)":
                     for _, row in b_df.iterrows():
                         st_color = "#28a745" if row['상태'] == "확정" else "#d9534f"
+                        
+                        # [지적사항 반영] 글자 수에 따른 폰트 크기 동적 조절 (14px ~ 11px)
+                        p_name = row['장소']
+                        p_font = "14px"
+                        if len(p_name) > 10: p_font = "12.5px"
+                        if len(p_name) > 14: p_font = "11px"
+
                         html_template = """
                         <div class="event-shell">
                             <div class="row-main">
-                                <div class="col-place">📍 {0}</div>
-                                <div class="col-time">🕒 {1}</div>
-                                <div class="col-status" style="color:{2};">{3}</div>
+                                <div class="col-place" style="font-size:{0};">📍 {1}</div>
+                                <div class="col-time">🕒 {2}</div>
+                                <div class="col-status" style="color:{3};">{4}</div>
                             </div>
-                            <div class="row-sub">📄 {4} ({5}, {6}명)</div>
-                        </div>""".format(row['장소'], row['시간'], st_color, row['상태'], row['행사명'], row['부서'], row['인원'])
+                            <div class="row-sub">📄 {5} ({6}, {7}명)</div>
+                        </div>""".format(p_font, p_name, row['시간'], st_color, row['상태'], row['행사명'], row['부서'], row['인원'])
                         st.markdown(html_template, unsafe_allow_html=True)
-                elif view_mode == "모바일(가로)":
-                    st.dataframe(b_df[['장소', '시간', '행사명', '상태']], use_container_width=True, hide_index=True)
+                else:
+                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
 else:
     st.info("조회된 내역이 없습니다.")
