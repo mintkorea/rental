@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 여백 최소화 CSS
+# 1. 페이지 설정 및 CSS (기존 스타일 유지)
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -17,6 +17,7 @@ st.markdown("""
     .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin: 0; padding: 5px 0; }
     .date-bar { background-color: #343a40; color: white; padding: 8px; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 8px; font-size: 14px; }
     .bu-header { font-size: 16px; font-weight: bold; color: #1E3A5F; margin: 12px 0 5px 0; border-left: 5px solid #1E3A5F; padding-left: 10px; }
+    .no-data { color: #7f8c8d; font-size: 13px; padding: 10px; background: #f8f9fa; border-radius: 4px; margin: 5px 0; border: 1px dashed #ced4da; }
     .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 8px 12px; margin-bottom: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .row-1 { display: flex; justify-content: space-between; align-items: center; }
     .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; }
@@ -35,40 +36,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# 2. 엑셀 출력 함수 (사용자 제시 인쇄 규격 반영)
-def create_formatted_excel(df, selected_buildings):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('대관현황')
-        
-        # 스타일 설정
-        hdr_fmt = workbook.add_format({'bold':True,'bg_color':'#333333','font_color':'white','align':'center','border':1})
-        bu_fmt = workbook.add_format({'bold':True,'bg_color':'#EBF1F8','border':1})
-        cell_fmt = workbook.add_format({'border':1,'align':'center','valign':'vcenter','text_wrap':True,'shrink':True})
-        
-        curr_row = 0
-        for d_str in sorted(df['full_date'].unique()):
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.set_row(curr_row, 35)
-            worksheet.merge_range(curr_row, 0, curr_row, 5, f"📅 {d_str} | {get_shift(d_obj)}", hdr_fmt)
-            curr_row += 1
-            
-            for bu in selected_buildings:
-                bu_clean = bu.replace(" ", "")
-                b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu_clean)]
-                if not b_df.empty:
-                    worksheet.set_row(curr_row, 35)
-                    worksheet.merge_range(curr_row, 0, curr_row, 5, f"  📍 {bu}", bu_fmt)
-                    curr_row += 1
-                    for _, r in b_df.iterrows():
-                        worksheet.set_row(curr_row, 35)
-                        worksheet.write_row(curr_row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], cell_fmt)
-                        curr_row += 1
-            curr_row += 1
-    return output.getvalue()
-
-# 3. 데이터 수집 및 엄격 필터링
+# 2. 데이터 수집 및 엄격 필터링 (사용자 로직)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -101,7 +69,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 화면 출력
+# 3. 메인 UI
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 with st.sidebar:
@@ -112,53 +80,37 @@ with st.sidebar:
 
 df = get_data(s_date, e_date)
 
-# 필터링 결과 출력 로직 개선
-if not df.empty:
-    with st.sidebar:
-        st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
-
-    # 날짜별 루프
-    date_list = sorted(df['full_date'].unique()) if not df.empty else []
+# 날짜별 출력 루프
+curr_date = s_date
+while curr_date <= e_date:
+    d_str = curr_date.strftime('%Y-%m-%d')
+    st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr_date.isoweekday()]}요일) | {get_shift(curr_date)}</div>', unsafe_allow_html=True)
     
-    # 만약 선택한 기간의 날짜가 데이터에 하나도 없다면 안내문 출력
-    found_any_in_range = False
+    # 해당 날짜에 데이터가 아예 없는 경우 대비
+    day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
     
-    curr_date = s_date
-    while curr_date <= e_date:
-        d_str = curr_date.strftime('%Y-%m-%d')
-        day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
+    for bu in sel_bu:
+        bu_clean = bu.replace(" ", "")
+        b_df = day_df[day_df['건물명'].str.replace(" ", "") == bu_clean] if not day_df.empty else pd.DataFrame()
         
-        # 해당 날짜에 선택한 건물의 데이터가 있는지 확인
-        filtered_day_df = day_df[day_df['건물명'].str.replace(" ", "").isin([b.replace(" ", "") for b in sel_bu])] if not day_df.empty else pd.DataFrame()
-
-        if not filtered_day_df.empty:
-            found_any_in_range = True
-            st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr_date.isoweekday()]}요일) | {get_shift(curr_date)}</div>', unsafe_allow_html=True)
+        # 건물명 헤더 출력
+        st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
+        
+        if not b_df.empty:
+            for _, r in b_df.sort_values('시간').iterrows():
+                s_cls = "status-y" if r['상태'] == '확정' else "status-n"
+                st.markdown(f'''
+                    <div class="mobile-card">
+                        <div class="row-1">
+                            <span class="loc-text">📍 {r["장소"]}</span>
+                            <span class="time-text">🕒 {r["시간"]}</span>
+                            <span class="status-badge {s_cls}">{r["상태"]}</span>
+                        </div>
+                        <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
+                    </div>
+                ''', unsafe_allow_html=True)
+        else:
+            # 말씀하신 "대관 내역이 없습니다" 표출 부분
+            st.markdown('<div class="no-data">ℹ️ 해당 일자에 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
             
-            for bu in sel_bu:
-                bu_clean = bu.replace(" ", "")
-                b_df = filtered_day_df[filtered_day_df['건물명'].str.replace(" ", "") == bu_clean]
-                
-                if not b_df.empty:
-                    st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
-                    for _, r in b_df.sort_values('시간').iterrows():
-                        s_cls = "status-y" if r['상태'] == '확정' else "status-n"
-                        st.markdown(f'''
-                            <div class="mobile-card">
-                                <div class="row-1">
-                                    <span class="loc-text">📍 {r["장소"]}</span>
-                                    <span class="time-text">🕒 {r["시간"]}</span>
-                                    <span class="status-badge {s_cls}">{r["상태"]}</span>
-                                </div>
-                                <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                            </div>
-                        ''', unsafe_allow_html=True)
-                else:
-                    # 건물별 결과 없음 안내 (선택사항: 너무 지저분하면 제거 가능)
-                    st.info(f"ℹ️ {d_str} {bu} 대관 내역이 없습니다.")
-        curr_date += timedelta(days=1)
-
-    if not found_any_in_range:
-        st.warning(f"⚠️ {s_date} ~ {e_date} 기간 내 선택하신 건물에 대한 검색 결과가 없습니다.")
-else:
-    st.warning(f"⚠️ {s_date} ~ {e_date} 기간에 조회된 대관 내역이 전혀 없습니다.")
+    curr_date += timedelta(days=1)
