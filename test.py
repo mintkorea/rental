@@ -25,29 +25,37 @@ st.markdown("""
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:15px; }
     .count-text { font-size: 15px; font-weight: bold; color: #333; }
 
-    /* [핵심 수정] 카드 디자인 및 겹침 방지 로직 */
+    /* [최종 수정] 텍스트 겹침 방지 및 셸 맞춤 로직 */
     .mobile-card { padding: 15px 0; border-bottom: 1px solid #eee; width: 100%; }
     .card-first-line { 
-        display: flex; justify-content: space-between; align-items: center; 
-        gap: 15px; /* 장소와 시간 사이 최소 간격 확보 */
+        display: flex; 
+        justify-content: space-between; 
+        align-items: flex-start; /* 긴 장소명 대비 상단 정렬 */
+        gap: 20px; /* 장소와 시간 사이 안전 거리 */
     }
     
     .place-name { 
         font-weight: bold; color: #333; font-size: 16px;
-        flex: 1; /* 남은 공간 모두 차지 */
-        min-width: 0; /* flex 안에서 텍스트 축소를 가능하게 함 */
-        word-break: break-all; /* 아주 긴 경우 자동 줄바꿈으로 겹침 방지 */
+        flex: 1; /* 가용 공간 모두 사용 */
+        min-width: 0; 
+        overflow-wrap: break-word; /* 셸 너비에 맞춰 자동 줄바꿈 (생략 금지) */
+        line-height: 1.4;
     }
     
     .time-status-area { 
         display: flex; align-items: center; 
-        flex-shrink: 0; /* 시간 영역은 절대 줄어들거나 밀리지 않음 */
-        text-align: right;
+        flex-shrink: 0; /* 시간 영역 절대 보호 */
+        white-space: nowrap;
+        margin-top: 2px;
     }
-    .time-text { font-size: 13px; color: #e74c3c; font-weight: bold; white-space: nowrap; }
-    .status-badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; margin-left:8px; white-space: nowrap; }
+    .time-text { font-size: 13px; color: #e74c3c; font-weight: bold; }
+    .status-badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; margin-left:8px; }
     
-    .card-second-line { font-size: 13px; color: #666; margin-top: 8px; }
+    .card-second-line { 
+        font-size: 13px; color: #666; margin-top: 8px; 
+        overflow-wrap: break-word; /* 행사명/부서 전체 표출 */
+        line-height: 1.4;
+    }
 
     /* 사이드바 스타일 */
     div.stDownloadButton > button {
@@ -132,10 +140,10 @@ def create_formatted_excel(df, selected_buildings):
                             worksheet.write(curr_row, 4, r['상태'], center_fmt)
                             curr_row += 1
                         curr_row += 1
-        worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 14); worksheet.set_column('C:C', 35); worksheet.set_column('D:E', 15)
+        worksheet.set_column('A:A', 22); worksheet.set_column('B:B', 14); worksheet.set_column('C:C', 38); worksheet.set_column('D:E', 15)
     return output.getvalue()
 
-# 5. UI 구성
+# UI 구성
 with st.sidebar:
     st.header("⚙️ 설정 및 도구")
     view_mode = st.radio("📱 보기 모드 설정", ["세로 모드 (카드)", "가로 모드 (표)"], index=0)
@@ -151,11 +159,11 @@ st.markdown('<div class="main-header">📋 성의교정 대관 현황 조회</di
 
 if not df_result.empty:
     col_config = {
-        "장소": st.column_config.TextColumn("장소", width=170),
+        "장소": st.column_config.TextColumn("장소", width=180),
         "시간": st.column_config.TextColumn("시간", width=110),
-        "행사명": st.column_config.TextColumn("행사명", width=280),
-        "부서": st.column_config.TextColumn("부서", width=140),
-        "상태": st.column_config.TextColumn("상태", width=70),
+        "행사명": st.column_config.TextColumn("행사명", width=300),
+        "부서": st.column_config.TextColumn("부서", width=150),
+        "상태": st.column_config.TextColumn("상태", width=80),
     }
 
     for d_str in sorted(df_result['full_date'].unique()):
