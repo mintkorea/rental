@@ -7,7 +7,6 @@ import io
 
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
-st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -18,7 +17,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# 2. 데이터 수집 및 allowDay 요일 필터 로직
+# 2. 데이터 수집 및 allowDay 필터링 (가장 초기 버전)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -31,8 +30,11 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            
+            # 요일 필터링 로직
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
+            
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
@@ -45,86 +47,39 @@ def get_data(start_date, end_date):
                             '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
                             '행사명': item.get('eventNm', '') or '-',
                             '부서': item.get('mgDeptNm', '') or '-',
-                            '상태': '확정' if item.get('status') == 'Y' else '대기',
-                            'is_period': s_dt != e_dt
+                            '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 3. 엑셀 생성 함수
-def create_formatted_excel(df, selected_buildings):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('현황')
-        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#333333', 'font_color': 'white', 'border': 1, 'align': 'center'})
-        bu_fmt = workbook.add_format({'bold': True, 'bg_color': '#f1f3f5', 'border': 1})
-        cell_fmt = workbook.add_format({'border': 1, 'text_wrap': True, 'valign': 'vcenter'})
-        
-        curr_row = 0
-        for d_str in sorted(df['full_date'].unique()):
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} | {get_shift(d_obj)}", header_fmt)
-            curr_row += 1
-            for bu in BUILDING_ORDER:
-                if bu in selected_buildings:
-                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
-                    if not b_df.empty:
-                        worksheet.merge_range(curr_row, 0, curr_row, 6, f"📍 {bu} ({len(b_df)}건)", bu_fmt)
-                        curr_row += 1
-                        for _, r in b_df.iterrows():
-                            worksheet.write_row(curr_row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], '-', '-', r['상태']], cell_fmt)
-                            curr_row += 1
-                        curr_row += 1
-    return output.getvalue()
-
-# --- 레이아웃 ---
+# 3. 사이드바 설정 (이때는 엑셀 버튼이 여기 있었습니다)
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    v_mode = st.radio("모드", ["모바일", "PC"], horizontal=True)
+    
+    df = get_data(s_date, e_date)
+    
+    if not df.empty:
+        # 엑셀 다운로드 버튼이 사이드바에 있던 시절
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='현황')
+        st.download_button("📥 엑셀 다운로드", data=output.getvalue(), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
 
-df = get_data(s_date, e_date)
-
+# --- 메인 화면 출력 ---
 if not df.empty:
-    # 엑셀 다운로드 (메인 상단)
-    st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
-
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        st.markdown(f'<div style="background-color:#f1f3f5; padding:10px; border-radius:5px; margin-top:20px;">'
-                    f'<h3>📅 {d_str} | {get_shift(d_obj)}</h3></div>', unsafe_allow_html=True)
+        st.subheader(f"📅 {d_str} ({get_shift(d_obj)})")
         
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             if not b_df.empty:
-                st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
-                
-                t_df = b_df[b_df['is_period'] == False]
-                p_df = b_df[b_df['is_period'] == True]
-                
-                for label, target_df in [("📌 당일 대관", t_df), ("🗓️ 기간 대관", p_df)]:
-                    if not target_df.empty:
-                        st.write(f"**{label}**")
-                        if v_mode == "PC":
-                            st.dataframe(target_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
-                        else:
-                            for _, r in target_df.iterrows():
-                                # 긴 장소명 가독성을 위해 div 구조 유지
-                                st.markdown(f"""
-                                <div style="border-bottom:1px solid #eee; padding:10px 0;">
-                                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                        <div style="font-weight:bold; font-size:15px; flex:1; padding-right:10px;">{r['장소']}</div>
-                                        <div style="text-align:right;">
-                                            <div style="color:#e74c3c; font-weight:bold; font-size:13px;">{r['시간']}</div>
-                                            <div style="background-color:#27ae60; color:white; padding:1px 4px; border-radius:3px; font-size:10px; display:inline-block; margin-top:2px;">{r['상태']}</div>
-                                        </div>
-                                    </div>
-                                    <div style="font-size:12px; color:#666; margin-top:4px;">{r['행사명']} | {r['부서']}</div>
-                                </div>
-                                """, unsafe_allow_html=True)
+                with st.expander(f"📍 {bu} ({len(b_df)}건)", expanded=True):
+                    # PC와 모바일 구분 없이 깔끔한 데이터프레임 위주 출력
+                    st.table(b_df[['장소', '시간', '행사명', '상태']])
 else:
-    st.info("내역이 없습니다.")
+    st.info("조회된 내역이 없습니다.")
