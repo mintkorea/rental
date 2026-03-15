@@ -4,24 +4,11 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 import io
-import streamlit.components.v1 as components
 
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. 화면 너비 감지 JS (가로 모드 체크용)
-# 이 스크립트는 브라우저의 너비를 감지하여 세션 스테이트에 저장합니다.
-device_width = components.html(
-    """
-    <script>
-    var width = window.parent.innerWidth;
-    window.parent.postMessage({type: 'streamlit:set_user_preference', payload: {width: width}}, '*');
-    </script>
-    """,
-    height=0,
-)
-
-# 3. 통합 디자인 CSS
+# 2. 반응형 디자인 CSS (핵심 수정)
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; max-width: 1100px !important; margin: 0 auto !important; }
@@ -29,22 +16,31 @@ st.markdown("""
     /* 타이틀 폰트 21px 적용 */
     .main-title { font-size: 21px !important; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; }
     
-    /* 카드 디자인 (세로 모드용) */
-    .event-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
-    .first-line { display: flex; justify-content: space-between; align-items: center; }
-    .place-name { font-weight: bold; color: #333; font-size: 14px; }
-    .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; }
-    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; }
-    .second-line { font-size: 11px; color: #888; margin-top: 4px; }
-    
+    /* 건물 헤더 */
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:20px; }
     .count-text { font-size: 14px; font-weight: bold; }
     
-    /* 내역 없음 박스 디자인 */
+    /* 내역 없음 박스 */
     .no-data-box { 
-        background-color: #f8f9fa; color: #1e3a5f; padding: 15px; 
+        background-color: #f8f9fa; color: #666; padding: 15px; 
         border-radius: 8px; text-align: center; font-size: 13px; 
-        margin-top: 10px; border: 1px solid #e9ecef;
+        margin-top: 10px; border: 1px solid #eee;
+    }
+
+    /* 카드 디자인 (세로 모드 전용) */
+    .mobile-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
+    .card-first-line { display: flex; justify-content: space-between; align-items: center; }
+    .place-name { font-weight: bold; color: #333; font-size: 14px; }
+    .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; }
+    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; }
+    .card-second-line { font-size: 11px; color: #888; margin-top: 4px; }
+
+    /* [반응형 제어] 768px 기준으로 카드와 표의 노출 여부 결정 */
+    @media (min-width: 768px) {
+        .mobile-only { display: none !important; }
+    }
+    @media (max-width: 767px) {
+        .pc-only { display: none !important; }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -98,14 +94,12 @@ with st.sidebar:
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    # 현재 기기의 방향에 따라 수동 조정도 가능하도록 함
-    mode_option = st.radio("표시 모드", ["자동 전환", "강제 카드", "강제 표"], horizontal=True)
 
 st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
-# 엑셀 다운로드 기능
+# 엑셀 다운로드 (상단)
 if not df.empty:
     sel_bu_keys = [b.replace(" ", "") for b in sel_bu]
     f_df = df[df['건물명_key'].isin(sel_bu_keys)].copy()
@@ -128,28 +122,30 @@ while curr_day <= e_date:
         st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
         
         if not b_df.empty:
-            # [핵심 로직] PC 모드(표)로 보여줄 조건: 모드가 '강제 표'이거나, '자동'이면서 화면이 넓을 때
-            if mode_option == "강제 표" or mode_option == "자동 전환":
-                # 가로 모드 시 표 형태로 표출
-                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
-            else:
-                # 세로 모드 시 카드 형태로 표출
-                for _, r in b_df.iterrows():
-                    bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
-                    st.markdown(f"""
-                        <div class="event-card">
-                            <div class="first-line">
-                                <div class="place-name">📍 {r['장소']}</div>
-                                <div class="status-right">
-                                    <span class="time-text">🕒 {r['시간']}</span>
-                                    <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
-                                </div>
+            # 1. PC/가로모드용 표 (화면이 넓을 때만 보임)
+            st.markdown('<div class="pc-only">', unsafe_allow_html=True)
+            st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # 2. 세로모드용 카드 (화면이 좁을 때만 보임)
+            st.markdown('<div class="mobile-only">', unsafe_allow_html=True)
+            for _, r in b_df.iterrows():
+                bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
+                st.markdown(f"""
+                    <div class="mobile-card">
+                        <div class="card-first-line">
+                            <div class="place-name">📍 {r['장소']}</div>
+                            <div class="status-right">
+                                <span class="time-text">🕒 {r['시간']}</span>
+                                <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
                             </div>
-                            <div class="second-line">📄 {r['행사명']} | {r['부서']}</div>
                         </div>
-                    """, unsafe_allow_html=True)
+                        <div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
-            # 내역 없음 표출
-            st.markdown(f'<div class="no-data-box">{bu} 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+            # 내역 없음 표출 (모든 모드 공통)
+            st.markdown(f'<div class="no-data-box">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
             
     curr_day += timedelta(days=1)
