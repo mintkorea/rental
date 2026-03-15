@@ -5,23 +5,31 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 디자인
+# 1. 페이지 설정 및 디자인(CSS)
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 4rem !important; }
+    .block-container { padding-top: 3.5rem !important; }
     section[data-testid="stSidebar"] { min-width: 320px !important; }
-    .main-title { font-size: 18px !important; font-weight: bold; margin-bottom: 20px; display: flex; align-items: center; }
+    
+    /* 메인 타이틀: 기존보다 3pt 키운 21px 적용 */
+    .main-title { font-size: 21px !important; font-weight: bold; color: #1e3a5f; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; }
+    
     .event-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
     .first-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; }
-    .place-name { flex: 1; min-width: 0; font-weight: bold; color: #333; font-size: 14px; line-height: 1.2; white-space: nowrap; overflow: hidden; }
-    .status-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-    .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; white-space: nowrap; }
-    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; white-space: nowrap; }
-    .second-line { font-size: 11px; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .place-name { flex: 1; font-weight: bold; color: #333; font-size: 14px; }
+    .status-right { display: flex; align-items: center; gap: 6px; }
+    .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; }
+    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; }
+    
+    .second-line { font-size: 11px; color: #888; margin-top: 4px; }
+    
     .building-header { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1e3a5f; padding:4px 0; margin-top:15px; }
     .count-text { font-size: 14px !important; font-weight: 900 !important; color: #000; }
+    
+    /* 차분한 내역 없음 메시지 */
+    .no-data-msg { color: #7f8c8d; font-size: 13px; padding: 15px 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -57,7 +65,7 @@ def get_data(start_date, end_date):
                         bu_nm_raw = str(item.get('buNm', '')).strip()
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
-                            '건물명': bu_nm_raw,
+                            '건물명_raw': bu_nm_raw,
                             '건물명_key': bu_nm_raw.replace(" ", ""),
                             '장소': item.get('placeNm', '') or '-',
                             '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
@@ -74,21 +82,30 @@ with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
     v_mode = st.radio("모드", ["모바일", "PC"], horizontal=True)
 
-st.markdown('<div class="main-title"><span>📋</span> 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
-# --- 출력 로직 핵심 수정 ---
-# 선택한 시작일부터 종료일까지 각 날짜별로 루프
+# --- 엑셀 다운로드 기능 복원 ---
+if not df.empty:
+    sel_bu_keys = [b.replace(" ", "") for b in sel_bu]
+    filtered_df_for_excel = df[df['건물명_key'].isin(sel_bu_keys)].copy()
+    
+    if not filtered_df_for_excel.empty:
+        excel_out = io.BytesIO()
+        with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
+            filtered_df_for_excel[['full_date', '건물명_raw', '장소', '시간', '행사명', '부서', '상태']].to_excel(writer, index=False)
+        st.download_button("📊 전체 조회 결과 엑셀 다운로드", data=excel_out.getvalue(), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
+
+# 날짜별 출력 루프
 curr_day = s_date
 while curr_day <= e_date:
     d_str = curr_day.strftime('%Y-%m-%d')
-    st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:25px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(curr_day)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:20px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(curr_day)}</div>', unsafe_allow_html=True)
     
-    # 해당 날짜에 선택한 건물들을 하나씩 검사
     for bu in sel_bu:
         bu_key = bu.replace(" ", "")
         b_df = df[(df['full_date'] == d_str) & (df['건물명_key'] == bu_key)]
@@ -114,7 +131,7 @@ while curr_day <= e_date:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            # [중요] 해당 건물에 내역이 없을 때 메시지 표출
-            st.info(f"{bu} 대관 내역이 없습니다.")
+            # 개별 건물 내역 없음 표출 (사진 요청 사항)
+            st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
             
     curr_day += timedelta(days=1)
