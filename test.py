@@ -5,9 +5,40 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 줌 대응 (확대 가능 설정)
+# 1. 페이지 설정 및 여백 최적화 CSS
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
-st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
+
+st.markdown("""
+    <style>
+    /* 상단 여백 제거 */
+    .block-container { padding-top: 1rem !important; padding-bottom: 0rem !important; }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* 타이틀 폰트 및 아이콘 크기 축소 (절반 수준) */
+    .main-title {
+        font-size: 22px !important;
+        font-weight: bold;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .main-title img { width: 30px; }
+
+    /* 남색 엑셀 버튼 스타일 */
+    div.stDownloadButton > button {
+        background-color: #1e3a5f !important;
+        color: white !important;
+        border-radius: 8px !important;
+        height: 45px !important;
+        font-weight: bold !important;
+        font-size: 15px !important;
+        border: none !important;
+        margin-bottom: 20px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -30,10 +61,8 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
-            
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
@@ -52,47 +81,31 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# --- 사이드바 설정 ---
+# --- 사이드바 ---
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    # [추가] PC/모바일 모드 선택 버튼
     v_mode = st.radio("디스플레이 모드", ["모바일", "PC"], horizontal=True)
 
-# --- 메인 화면 출력 ---
-# [추가] 메인 타이틀
-st.title("📋 성의교정 대관 현황 조회")
+# --- 메인 화면 ---
+# 타이틀 폰트 절반 축소 및 상단 배치
+st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    # 남색 버튼 디자인 유지
-    st.markdown("""
-        <style>
-        div.stDownloadButton > button {
-            background-color: #1e3a5f !important;
-            color: white !important;
-            border-radius: 8px !important;
-            height: 50px !important;
-            font-weight: bold !important;
-            font-size: 16px !important;
-            border: none !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # 엑셀 다운로드 (실제 데이터 연동)
+    # 엑셀 다운로드
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='현황')
-    st.download_button("📊 조회 결과 엑셀 파일 다운로드", data=output.getvalue(), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
+        df.to_excel(writer, index=False)
+    st.download_button("📊 조회 결과 엑셀 파일 다운로드", data=output.getvalue(), file_name=f"현황.xlsx", use_container_width=True)
 
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
         st.markdown(f"""
-            <div style="background-color:#4d4d4d; color:white; padding:10px; border-radius:8px; text-align:center; margin-top:30px; margin-bottom:10px; font-weight:bold;">
+            <div style="background-color:#4d4d4d; color:white; padding:8px; border-radius:8px; text-align:center; margin-bottom:10px; font-weight:bold; font-size:14px;">
                 📅 {d_str} | {get_shift(d_obj)}
             </div>
         """, unsafe_allow_html=True)
@@ -100,11 +113,10 @@ if not df.empty:
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             
-            # 건물명 바 출력
             st.markdown(f"""
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:5px 0; margin-top:15px;">
-                    <div style="font-size:18px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div>
-                    <div style="font-size:12px; color:#666;">총 {len(b_df)}건</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:5px 0; margin-top:10px;">
+                    <div style="font-size:16px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div>
+                    <div style="font-size:11px; color:#666;">총 {len(b_df)}건</div>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -113,24 +125,23 @@ if not df.empty:
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
                 else:
                     for _, r in b_df.iterrows():
-                        # [장소명 대응] flex 구조로 긴 명칭이 시각적으로 밀리지 않게 처리
+                        # 상태 표시(확정/대기)가 밀리지 않도록 고정 레이아웃 적용
                         st.markdown(f"""
-                            <div style="padding:10px 0; border-bottom:1px solid #eee;">
+                            <div style="padding:8px 0; border-bottom:1px solid #eee;">
                                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                    <div style="font-weight:bold; color:#333; flex:1; padding-right:10px; font-size:15px;">📍 {r['장소']}</div>
-                                    <div style="text-align:right; min-width:100px;">
-                                        <div style="font-size:13px;"><span style="color:#666;">🕒</span> <span style="color:#e74c3c; font-weight:bold;">{r['시간']}</span></div>
-                                        <div style="background-color:#27ae60; color:white; padding:1px 4px; border-radius:3px; font-size:10px; display:inline-block; margin-top:2px;">{r['상태']}</div>
+                                    <div style="font-weight:bold; color:#333; flex:1; padding-right:5px; font-size:14px; word-break:break-all;">📍 {r['장소']}</div>
+                                    <div style="text-align:right; min-width:110px; flex-shrink:0;">
+                                        <div style="font-size:12px;"><span style="color:#666;">🕒</span> <span style="color:#e74c3c; font-weight:bold;">{r['시간']}</span></div>
+                                        <div style="background-color:{'#27ae60' if r['상태']=='확정' else '#95a5a6'}; color:white; padding:1px 4px; border-radius:3px; font-size:10px; display:inline-block; margin-top:2px; font-weight:bold;">{r['상태']}</div>
                                     </div>
                                 </div>
-                                <div style="font-size:12px; color:#888; margin-top:4px; display:flex; align-items:flex-start;">
+                                <div style="font-size:11px; color:#888; margin-top:3px; display:flex; align-items:flex-start;">
                                     <span style="margin-right:5px;">📄</span>
-                                    <div>{r['행사명']} | {r['부서']}</div>
+                                    <div style="word-break:break-all;">{r['행사명']} | {r['부서']}</div>
                                 </div>
                             </div>
                         """, unsafe_allow_html=True)
             else:
-                # [추가] 검색 결과 없는 건물 메시지
-                st.markdown('<div style="color:#bbb; font-size:12px; padding:10px; text-align:center;">조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+                st.markdown('<div style="color:#bbb; font-size:11px; padding:5px; text-align:center;">조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
-    st.info("선택하신 기간에 대관 내역이 없습니다.")
+    st.info("내역이 없습니다.")
