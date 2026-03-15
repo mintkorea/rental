@@ -39,7 +39,6 @@ def get_data(start_date, end_date):
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
                     curr_wd = str(curr.isoweekday())
-                    # [핵심] allowDay 요일이 일치할 때만 행에 추가
                     if not allowed_days or curr_wd in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
@@ -58,7 +57,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 엑셀 생성 로직 (중복 방지 반영)
+# 4. 엑셀 생성 로직 (셸 크기 및 정렬 수정)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -66,9 +65,14 @@ def create_formatted_excel(df, selected_buildings):
         worksheet = workbook.add_worksheet('대관현황')
         worksheet.set_landscape()
         
+        # 서식 설정
         date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 12, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'border': 1})
         bu_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#EBF1F8', 'border': 1})
-        cell_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
+        
+        # 일반 텍스트 정렬 (좌측)
+        left_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True})
+        # 중앙 정렬 서식 (시간, 인원, 부스, 상태용)
+        center_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter'})
 
         curr_row = 1
         for d_str in sorted(df['full_date'].unique()):
@@ -77,22 +81,30 @@ def create_formatted_excel(df, selected_buildings):
             curr_row += 1
             for bu in BUILDING_ORDER:
                 if bu in selected_buildings:
-                    # 완전 일치 매칭으로 중복 방지
-                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
+                    bu_clean = bu.replace(" ", "")
+                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu_clean)]
                     if not b_df.empty:
                         worksheet.merge_range(curr_row, 0, curr_row, 6, f"  📍 {bu}", bu_fmt)
                         curr_row += 1
                         for _, r in b_df.iterrows():
-                            worksheet.write(curr_row, 0, r['장소'], cell_fmt)
-                            worksheet.write(curr_row, 1, r['시간'], cell_fmt)
-                            worksheet.write(curr_row, 2, r['행사명'], cell_fmt)
-                            worksheet.write(curr_row, 3, r['부서'], cell_fmt)
-                            worksheet.write(curr_row, 4, r['인원'], cell_fmt)
-                            worksheet.write(curr_row, 5, r['부스'], cell_fmt)
-                            worksheet.write(curr_row, 6, r['상태'], cell_fmt)
+                            # 열 순서에 맞춰 서식 적용 (0:장소, 1:시간, 2:행사명, 3:부서, 4:인원, 5:부스, 6:상태)
+                            worksheet.write(curr_row, 0, r['장소'], left_fmt)
+                            worksheet.write(curr_row, 1, r['시간'], center_fmt) # 시간 중앙정렬
+                            worksheet.write(curr_row, 2, r['행사명'], left_fmt)
+                            worksheet.write(curr_row, 3, r['부서'], left_fmt)
+                            worksheet.write(curr_row, 4, r['인원'], center_fmt) # 인원 중앙정렬
+                            worksheet.write(curr_row, 5, r['부스'], center_fmt) # 부스 중앙정렬
+                            worksheet.write(curr_row, 6, r['상태'], center_fmt) # 상태 중앙정렬
                             curr_row += 1
                         curr_row += 1
-        worksheet.set_column('A:A', 18); worksheet.set_column('C:C', 35); worksheet.set_column('D:D', 18)
+        
+        # 셸 너비 조정 (요청사항 반영)
+        worksheet.set_column('A:A', 20)  # 장소
+        worksheet.set_column('B:B', 12)  # 시간 (수정: 12)
+        worksheet.set_column('C:C', 35)  # 행사명
+        worksheet.set_column('D:D', 18)  # 부서
+        worksheet.set_column('E:G', 7)   # 인원, 부스, 상태 (수정: 7)
+        
     return output.getvalue()
 
 # 5. 메인 UI
@@ -115,7 +127,6 @@ if not df.empty:
                     f'<h3>📅 {d_str} | 근무조: {get_shift(d_obj)}</h3></div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
-            # [중복 방지] 완전 일치 매칭 (==)
             bu_clean = bu.replace(" ", "")
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu_clean)]
             
@@ -125,7 +136,6 @@ if not df.empty:
                 t_df = b_df[b_df['is_period'] == False]
                 p_df = b_df[b_df['is_period'] == True]
                 
-                # 표(Dataframe) 형식으로 노출
                 if not t_df.empty:
                     st.write("**📌 당일 대관**")
                     st.dataframe(t_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
