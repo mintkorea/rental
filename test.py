@@ -11,57 +11,21 @@ st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="�
 st.markdown("""
     <style>
     .block-container { padding-top: 4rem !important; max-width: 1000px !important; margin: 0 auto !important; }
-    
-    /* 메인 타이틀 */
     .main-header { font-size: 26px; font-weight: bold; color: #1e3a5f; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; }
-    
-    /* 날짜 소타이틀 */
-    .date-shift-bar {
-        background-color: #444; color: white; padding: 15px; border-radius: 8px;
-        text-align: center; margin: 25px 0 15px 0; font-weight: bold; font-size: 19px !important;
-    }
-
-    /* 건물 헤더 */
+    .date-shift-bar { background-color: #444; color: white; padding: 15px; border-radius: 8px; text-align: center; margin: 25px 0 15px 0; font-weight: bold; font-size: 19px !important; }
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:15px; }
     .count-text { font-size: 15px; font-weight: bold; color: #333; }
 
-    /* [최종 수정] 텍스트 겹침 방지 및 셸 맞춤 로직 */
+    /* 모바일 카드 디자인 및 겹침 방지 */
     .mobile-card { padding: 15px 0; border-bottom: 1px solid #eee; width: 100%; }
-    .card-first-line { 
-        display: flex; 
-        justify-content: space-between; 
-        align-items: flex-start; /* 긴 장소명 대비 상단 정렬 */
-        gap: 20px; /* 장소와 시간 사이 안전 거리 */
-    }
-    
-    .place-name { 
-        font-weight: bold; color: #333; font-size: 16px;
-        flex: 1; /* 가용 공간 모두 사용 */
-        min-width: 0; 
-        overflow-wrap: break-word; /* 셸 너비에 맞춰 자동 줄바꿈 (생략 금지) */
-        line-height: 1.4;
-    }
-    
-    .time-status-area { 
-        display: flex; align-items: center; 
-        flex-shrink: 0; /* 시간 영역 절대 보호 */
-        white-space: nowrap;
-        margin-top: 2px;
-    }
+    .card-first-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+    .place-name { font-weight: bold; color: #333; font-size: 16px; flex: 1; min-width: 0; overflow-wrap: break-word; line-height: 1.4; }
+    .time-status-area { display: flex; align-items: center; flex-shrink: 0; white-space: nowrap; margin-top: 2px; }
     .time-text { font-size: 13px; color: #e74c3c; font-weight: bold; }
     .status-badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; margin-left:8px; }
-    
-    .card-second-line { 
-        font-size: 13px; color: #666; margin-top: 8px; 
-        overflow-wrap: break-word; /* 행사명/부서 전체 표출 */
-        line-height: 1.4;
-    }
+    .card-second-line { font-size: 13px; color: #666; margin-top: 8px; overflow-wrap: break-word; line-height: 1.4; }
 
-    /* 사이드바 스타일 */
-    div.stDownloadButton > button {
-        width: 100%; background-color: #1e3a5f !important; color: white !important;
-        border: none !important; padding: 12px !important; border-radius: 8px !important; font-weight: bold !important;
-    }
+    div.stDownloadButton > button { width: 100%; background-color: #1e3a5f !important; color: white !important; border: none !important; padding: 12px !important; border-radius: 8px !important; font-weight: bold !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -91,8 +55,7 @@ def get_data(start_date, end_date):
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    curr_wd = str(curr.isoweekday())
-                    if not allowed_days or curr_wd in allowed_days:
+                    if not allowed_days or str(curr.isoweekday()) in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
                             '건물명': str(item.get('buNm', '')).strip(),
@@ -106,7 +69,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-def create_formatted_excel(df, selected_buildings):
+def create_formatted_excel(df, selected_buildings, start_date):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
@@ -115,24 +78,28 @@ def create_formatted_excel(df, selected_buildings):
         m = 0.39
         worksheet.set_margins(left=m, right=m, top=m, bottom=m)
         
+        # [포맷] 셸 높이 35pt 통일 및 자동 축소 적용
+        common = {'border': 1, 'valign': 'vcenter', 'text_wrap': True, 'shrink': True, 'font_size': 10}
         date_hdr_fmt = workbook.add_format({'bold': 1, 'font_size': 12, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         bu_fmt = workbook.add_format({'bold': 1, 'font_size': 11, 'bg_color': '#EBF1F8', 'align': 'left', 'valign': 'vcenter', 'border': 1, 'indent': 1})
-        left_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'indent': 1})
-        center_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter'})
+        left_fmt = workbook.add_format({**common, 'align': 'left', 'indent': 1})
+        center_fmt = workbook.add_format({**common, 'align': 'center'})
 
         curr_row = 1
         for d_str in sorted(df['full_date'].unique()):
             d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.set_row(curr_row, 30)
+            worksheet.set_row(curr_row, 35)
             worksheet.merge_range(curr_row, 0, curr_row, 4, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", date_hdr_fmt)
             curr_row += 1
             for bu in BUILDING_ORDER:
                 if bu in selected_buildings:
                     b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
                     if not b_df.empty:
+                        worksheet.set_row(curr_row, 35)
                         worksheet.merge_range(curr_row, 0, curr_row, 4, f"  📍 {bu}", bu_fmt)
                         curr_row += 1
                         for _, r in b_df.iterrows():
+                            worksheet.set_row(curr_row, 35)
                             worksheet.write(curr_row, 0, r['장소'], left_fmt)
                             worksheet.write(curr_row, 1, r['시간'], center_fmt)
                             worksheet.write(curr_row, 2, r['행사명'], left_fmt)
@@ -140,7 +107,13 @@ def create_formatted_excel(df, selected_buildings):
                             worksheet.write(curr_row, 4, r['상태'], center_fmt)
                             curr_row += 1
                         curr_row += 1
-        worksheet.set_column('A:A', 22); worksheet.set_column('B:B', 14); worksheet.set_column('C:C', 38); worksheet.set_column('D:E', 15)
+
+        # [너비] 장소(25), 부서(20=80%), 상태(8=최소)
+        worksheet.set_column('A:A', 25)
+        worksheet.set_column('B:B', 14)
+        worksheet.set_column('C:C', 35)
+        worksheet.set_column('D:D', 20)
+        worksheet.set_column('E:E', 8)
     return output.getvalue()
 
 # UI 구성
@@ -153,46 +126,25 @@ with st.sidebar:
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
     df_result = get_data(s_date, e_date)
     if not df_result.empty:
-        st.download_button(label="📥 엑셀 결과 다운로드", data=create_formatted_excel(df_result, sel_bu), file_name=f"현황.xlsx", use_container_width=True)
+        st.download_button(label="📥 엑셀 결과 다운로드", data=create_formatted_excel(df_result, sel_bu, s_date), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
 
 st.markdown('<div class="main-header">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 if not df_result.empty:
-    col_config = {
-        "장소": st.column_config.TextColumn("장소", width=180),
-        "시간": st.column_config.TextColumn("시간", width=110),
-        "행사명": st.column_config.TextColumn("행사명", width=300),
-        "부서": st.column_config.TextColumn("부서", width=150),
-        "상태": st.column_config.TextColumn("상태", width=80),
-    }
+    col_config = {"장소": st.column_config.TextColumn("장소", width=180), "시간": st.column_config.TextColumn("시간", width=110), "행사명": st.column_config.TextColumn("행사명", width=300), "부서": st.column_config.TextColumn("부서", width=144), "상태": st.column_config.TextColumn("상태", width=80)}
 
     for d_str in sorted(df_result['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
         st.markdown(f'<div class="date-shift-bar">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
-        
         for bu in sel_bu:
             b_df = df_result[(df_result['full_date'] == d_str) & (df_result['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             st.markdown(f'<div class="building-header"><div style="font-size:17px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
-            
             if not b_df.empty:
                 if view_mode == "가로 모드 (표)":
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True, column_config=col_config)
                 else:
                     for _, r in b_df.iterrows():
                         bg = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
-                        st.markdown(f"""
-                            <div class="mobile-card">
-                                <div class="card-first-line">
-                                    <div class="place-name">📍 {r['장소']}</div>
-                                    <div class="time-status-area">
-                                        <span class="time-text">🕒 {r['시간']}</span>
-                                        <span class="status-badge" style="background-color:{bg};">{r['상태']}</span>
-                                    </div>
-                                </div>
-                                <div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div>
-                            </div>
-                        """, unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div style="color:#999; padding:10px; font-size:14px;">{bu} 대관 내역 없음</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="mobile-card"><div class="card-first-line"><div class="place-name">📍 {r["장소"]}</div><div class="time-status-area"><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge" style="background-color:{bg};">{r["상태"]}</span></div></div><div class="card-second-line">📄 {r["행사명"]} | {r["부서"]}</div></div>', unsafe_allow_html=True)
 else:
     st.info("조회된 대관 내역이 없습니다.")
