@@ -17,21 +17,39 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일: 폰트 밸런스 조정 및 1줄 나열 강제 (가이드라인 준수)
-# SyntaxError 방지를 위해 format용 {{ }} 사용
+# 2. CSS 스타일: 타이틀 강화 및 1줄 나열 레이아웃 (가이드라인 준수)
 style_html = """
 <style>
-    .main-title {{ font-size: 2.3rem !important; font-weight: 800; color: #1e3a5f; text-align: center; margin: 15px 0; }}
-    .bu-header {{ font-size: 1.4rem !important; font-weight: 700; color: #1e3a5f; margin: 0; }}
-    .event-shell {{ border-bottom: 1px solid #eee; padding: 10px 0; background: white; }}
-    .row-main {{ display: flex; align-items: center; justify-content: space-between; gap: 4px; width: 100%; }}
-    .col-place {{ 
-        flex: 5.5; font-weight: 700; color: #1e3a5f; 
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+    /* 타이틀 크기 대폭 강화 */
+    .main-title {{ 
+        font-size: 2.6rem !important; 
+        font-weight: 900; 
+        color: #1e3a5f; 
+        text-align: center; 
+        margin: 20px 0;
+        line-height: 1.2;
     }}
-    .col-time {{ flex: 3.2; font-size: 12px; color: #d9534f; font-weight: 600; text-align: center; white-space: nowrap; }}
-    .col-status {{ flex: 1.3; font-size: 12px; font-weight: 800; text-align: right; white-space: nowrap; }}
-    .row-sub {{ font-size: 12px; color: #666; margin-top: 5px; line-height: 1.3; }}
+    /* 건물명 폰트 크기 최적화 및 배지 정렬 */
+    .bu-header {{ font-size: 1.25rem !important; font-weight: 800; color: #1e3a5f; }}
+    .bu-badge {{ font-size: 11px; background: #e1e8f0; padding: 2px 8px; border-radius: 10px; font-weight: bold; }}
+    
+    .event-shell {{ border-bottom: 1px solid #eee; padding: 12px 0; background: white; }}
+    
+    /* [📍장소 | 🕒시간 | ✅상태] 3열 그리드 고정 */
+    .row-main {{ 
+        display: grid; 
+        grid-template-columns: 5.5fr 3.2fr 1.3fr; 
+        align-items: center; 
+        gap: 4px; 
+        width: 100%; 
+    }}
+    .col-place {{ 
+        font-weight: 700; color: #1e3a5f; 
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+    }}
+    .col-time {{ font-size: 11px; color: #d9534f; font-weight: 600; text-align: center; white-space: nowrap; }}
+    .col-status {{ font-size: 11.5px; font-weight: 800; text-align: right; white-space: nowrap; }}
+    .row-sub {{ font-size: 11.5px; color: #555; margin-top: 5px; line-height: 1.3; }}
 </style>
 """
 st.markdown(style_html, unsafe_allow_html=True)
@@ -58,7 +76,7 @@ def get_data(start_date, end_date):
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    # [가이드라인] 요일 필터링 적용
+                    # 요일 필터링 로직 (가이드라인 준수)
                     if not allow_days or str(curr.isoweekday()) in allow_days:
                         rows.append({
                             '날짜': curr.strftime('%Y-%m-%d'),
@@ -74,7 +92,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 사이드바 구성: 자동 세팅 및 엑셀 다운로드 (가이드라인 준수)
+# 4. 사이드바 구성 및 엑셀 다운로드 기능
 with st.sidebar:
     st.header("🔍 설정")
     view_mode = st.radio("📺 보기 모드", ["PC 모드", "모바일(세로)"], index=1)
@@ -82,9 +100,9 @@ with st.sidebar:
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-    # [가이드라인] 디자인과 무관한 독립형 엑셀 다운로드 기능
     df = get_data(s_date, e_date)
     if not df.empty:
+        # 가이드라인 준수: 디자인과 분리된 순수 데이터 엑셀 추출
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='대관현황')
@@ -95,7 +113,7 @@ with st.sidebar:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-st.markdown('<div class="main-title">🏢 성의교정 실시간 대관 현황</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
 
 if not df.empty:
     for d_str in sorted(df['날짜'].unique()):
@@ -105,18 +123,17 @@ if not df.empty:
         for bu in sel_bu:
             b_df = df[(df['날짜'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
             if not b_df.empty:
-                st.markdown('<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #1e3a5f; margin:15px 0 5px 0;"><span class="bu-header">🏢 {0}</span><span style="font-size:12px; background:#e1e8f0; padding:2px 8px; border-radius:10px;">총 {1}건</span></div>'.format(bu, len(b_df)), unsafe_allow_html=True)
+                # 건물명과 총 건수 배지를 한 줄에 깔끔하게 배치
+                st.markdown('<div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2.5px solid #1e3a5f; margin:18px 0 6px 0;"><span class="bu-header">🏢 {0}</span><span class="bu-badge">총 {1}건</span></div>'.format(bu, len(b_df)), unsafe_allow_html=True)
                 
                 if view_mode == "모바일(세로)":
                     for _, row in b_df.iterrows():
                         color = "#28a745" if row['상태'] == "확정" else "#d9534f"
-                        # [가이드라인] 가변 폰트 및 장소명 1줄 제어
                         p_name = row['장소']
-                        p_font = "14px"
-                        if len(p_name) > 10: p_font = "12px"
-                        if len(p_name) > 14: p_font = "11px"
+                        # 가이드라인 준수: 가변 폰트 적용
+                        p_font = "14px" if len(p_name) <= 10 else ("12px" if len(p_name) <= 14 else "10.5px")
 
-                        # [가이드라인] .format() 사용하여 구문 에러 방지
+                        # 가이드라인 준수: .format() 사용하여 SyntaxError 차단
                         html_item = """
                         <div class="event-shell">
                             <div class="row-main">
@@ -132,4 +149,3 @@ if not df.empty:
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
 else:
     st.info("조회된 내역이 없습니다.")
-
