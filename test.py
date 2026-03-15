@@ -5,49 +5,46 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 전역 설정 및 Viewport (줌 가능하도록 설정)
+# 1. 초기 설정 및 전역 변수
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="📋", layout="wide")
-
-# 변수 사전 정의 (에러 방지)
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 KST = pytz.timezone('Asia/Seoul')
+BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. 강력한 모드별 CSS (중복 노출 차단 및 줌 대응)
+# 2. 메인 스타일 및 중복 노출 방지 CSS
 st.markdown("""
 <style>
-    /* 전체 배경 */
     .stApp { background-color: #f8f9fa; }
+    /* 메인 타이틀 스타일 */
+    .main-title { font-size: 1.8rem; font-weight: bold; color: #1e3a5f; text-align: center; margin-bottom: 20px; }
+    
+    /* 날짜 및 근무조 헤더 */
+    .date-container { background: #333; color: white; padding: 12px; border-radius: 8px; margin-top: 25px; font-weight: bold; font-size: 1.1rem; }
+    
+    /* 건물 헤더 및 행사 개수 배지 */
+    .bu-header { font-size: 1.2rem; font-weight: bold; color: #1e3a5f; padding: 8px 0; border-bottom: 2px solid #1e3a5f; margin-top: 15px; display: flex; justify-content: space-between; }
+    .event-count { background: #e1e8f0; color: #1e3a5f; padding: 2px 8px; border-radius: 12px; font-size: 0.9rem; }
 
-    /* [세로 모드 전용] 768px 미만 */
+    /* [세로/가로 모드 중복 노출 방지] */
     @media (max-width: 767px) {
         .view-desktop { display: none !important; }
         .view-mobile { display: block !important; }
-        
-        .event-shell { border-bottom: 1px solid #dee2e6; padding: 12px 5px; background-color: white; }
-        .row-1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-        .col-place { flex: 5; font-size: 16px; font-weight: bold; color: #222; }
-        .col-time { flex: 3.5; font-size: 14px; color: #ff4b4b; font-weight: 600; text-align: center; }
-        .col-status { flex: 1.5; font-size: 13px; text-align: right; font-weight: bold; color: #28a745; }
-        .row-2 { font-size: 14px; color: #555; line-height: 1.5; }
     }
-
-    /* [가로 모드/PC 전용] 768px 이상 */
     @media (min-width: 768px) {
         .view-mobile { display: none !important; }
         .view-desktop { display: block !important; }
-        
-        /* 표 폰트 및 셸 높이 최적화 */
-        .stDataFrame div[data-testid="stTable"] { font-size: 15px !important; }
-        .stDataFrame td { height: 45px !important; vertical-align: middle !important; }
     }
 
-    /* 공통 헤더 스타일 */
-    .date-container { background: #333; color: white; padding: 12px; border-radius: 8px; margin-top: 20px; font-weight: bold; font-size: 1.1rem; }
-    .bu-header { font-size: 1.2rem; font-weight: bold; color: #1e3a5f; padding: 8px 0; border-bottom: 2px solid #1e3a5f; margin-top: 15px; }
+    /* 모바일 셸 레이아웃 */
+    .event-shell { border-bottom: 1px solid #dee2e6; padding: 12px 5px; background: white; }
+    .row-1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .col-place { flex: 5; font-size: 16px; font-weight: bold; color: #222; }
+    .col-time { flex: 3.5; font-size: 14px; color: #ff4b4b; font-weight: 600; text-align: center; }
+    .col-status { flex: 1.5; font-size: 13px; text-align: right; color: #28a745; font-weight: bold; }
+    .row-2 { font-size: 14px; color: #555; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 계산 및 데이터 로직
+# 3. 계산 함수
 def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
@@ -67,7 +64,6 @@ def get_data(start_date, end_date):
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             allow_day = str(item.get('allowDay', ''))
             allowed_days = [d.strip() for d in allow_day.split(",") if d.strip().isdigit()]
-            
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
@@ -86,7 +82,10 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 메인 UI 및 사이드바
+# 4. 상단 메인 타이틀 표출
+st.markdown('<div class="main-title">🏢 성의교정 실시간 대관 현황</div>', unsafe_allow_html=True)
+
+# 5. 사이드바 설정
 with st.sidebar:
     st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=datetime.now(KST).date())
@@ -95,7 +94,7 @@ with st.sidebar:
 
 df = get_data(s_date, e_date)
 
-# 5. 화면 출력 부분
+# 6. 본문 출력
 if not df.empty:
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
@@ -103,10 +102,17 @@ if not df.empty:
         
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
+            
             if not b_df.empty:
-                st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
+                # 건물별 행사 개수 표출
+                st.markdown(f"""
+                <div class="bu-header">
+                    <span>🏢 {bu}</span>
+                    <span class="event-count">총 {len(b_df)}건</span>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # --- [세로 모드 뷰] ---
+                # --- 세로 모드 (모바일 셸) ---
                 mobile_html = '<div class="view-mobile">'
                 for _, row in b_df.iterrows():
                     mobile_html += f"""
@@ -121,8 +127,7 @@ if not df.empty:
                 mobile_html += '</div>'
                 st.markdown(mobile_html, unsafe_allow_html=True)
 
-                # --- [가로 모드 뷰] ---
-                # 가로 모드 표의 열 너비를 고정하여 셸 크기가 제각각인 것 방지
+                # --- 가로 모드 (데스크톱 표) ---
                 st.markdown('<div class="view-desktop">', unsafe_allow_html=True)
                 st.dataframe(
                     b_df[['장소', '시간', '행사명', '부서', '인원', '상태']], 
@@ -136,4 +141,4 @@ if not df.empty:
                 )
                 st.markdown('</div>', unsafe_allow_html=True)
 else:
-    st.info("내역이 없습니다.")
+    st.info("선택한 조건의 대관 내역이 없습니다.")
