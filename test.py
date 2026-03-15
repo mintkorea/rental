@@ -5,27 +5,24 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 줌 기능 (관리자 필수 지시)
-st.set_page_config(page_title="성의교정 실시간 대관 현황", layout="wide")
+# 1. 페이지 설정 및 줌 기능 활성화
+st.set_page_config(page_title="성의교정 실시간 대관 현황", layout="wide", initial_sidebar_state="expanded")
 st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일: 여백 제거 및 버튼 강조
+# 2. CSS 스타일: 여백 최소화 및 레이아웃 정리
 st.markdown("""
 <style>
-    /* 상단 여백 제거 */
-    .block-container { padding-top: 1rem !important; padding-bottom: 0rem !important; }
-    .main-title { font-size: 1.8rem !important; font-weight: 800; color: #1e3a5f; text-align: center; margin: 0 0 10px 0; }
-    
-    /* 버튼 및 헤더 스타일 */
-    .date-header { background: #4a4a4a; color: white; padding: 10px; border-radius: 6px; margin: 10px 0; font-weight: 700; font-size: 1rem; text-align: center; }
+    .block-container { padding-top: 1rem !important; }
+    .main-title { font-size: 1.8rem !important; font-weight: 800; color: #1e3a5f; text-align: center; margin-bottom: 5px; }
+    .date-header { background: #4a4a4a; color: white; padding: 10px; border-radius: 6px; margin: 15px 0 10px 0; font-weight: 700; font-size: 1rem; text-align: center; }
     .bu-row { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; border-bottom: 2px solid #1e3a5f; padding-bottom: 5px; }
     .bu-header { font-size: 1.1rem !important; font-weight: 800; color: #1e3a5f; }
     
-    /* 모바일 레이아웃 그리드 */
+    /* 모바일 그리드 설정 */
     .event-shell { border-bottom: 1px solid #eee; padding: 10px 0; }
     .row-main { display: grid; grid-template-columns: 5.2fr 3.5fr 1.3fr; align-items: center; gap: 5px; width: 100%; }
     .col-place { font-weight: 700; color: #1e3a5f; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -68,36 +65,57 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-def create_excel(df):
+def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook, worksheet = writer.book, writer.book.add_worksheet('현황')
         cell_fmt = workbook.add_format({'border': 1, 'align': 'left', 'valign': 'vcenter', 'shrink': True})
-        for i in range(100): worksheet.set_row(i, 35) # 행 높이 35 고수
-        df.to_excel(writer, index=False, sheet_name='현황')
+        hdr_fmt = workbook.add_format({'bold': True, 'bg_color': '#333333', 'font_color': 'white', 'border': 1, 'align': 'center', 'valign': 'vcenter'})
+        
+        curr_row = 0
+        for d_str in sorted(df['full_date'].unique()):
+            worksheet.set_row(curr_row, 35)
+            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} | 근무조: {get_shift(datetime.strptime(d_str, '%Y-%m-%d').date())}", hdr_fmt)
+            curr_row += 1
+            for bu in BUILDING_ORDER:
+                if bu in selected_buildings:
+                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
+                    if not b_df.empty:
+                        worksheet.set_row(curr_row, 35)
+                        worksheet.merge_range(curr_row, 0, curr_row, 6, f"  📍 {bu}", cell_fmt)
+                        curr_row += 1
+                        for _, r in b_df.iterrows():
+                            worksheet.set_row(curr_row, 35)
+                            for c, val in enumerate([r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['부스'], r['상태']]):
+                                worksheet.write(curr_row, c, val, cell_fmt)
+                            curr_row += 1
     return output.getvalue()
+
+# --- 사이드바: 필터 및 기간 설정 ---
+with st.sidebar:
+    st.header("⚙️ 검색 필터")
+    start_d = st.date_input("조회 시작일", value=now_today)
+    end_d = st.date_input("조회 종료일", value=now_today)
+    sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
+    view_mode = st.radio("보기 모드", ["모바일", "PC"], horizontal=True)
 
 # --- 메인 UI 시작 ---
 st.markdown('<div class="main-title">🏢 실시간 대관 현황</div>', unsafe_allow_html=True)
 
-# 1. 기간 검색 및 모드 선택 (상단 여백 없이 배치)
-c1, c2, c3 = st.columns([1.5, 1.5, 1])
-with c1: start_d = st.date_input("시작일", value=now_today)
-with c2: end_d = st.date_input("종료일", value=now_today)
-with c3: view_mode = st.radio("보기 모드", ["모바일", "PC"], horizontal=True)
-
 df = get_data(start_d, end_d)
 
-# 2. 엑셀 다운로드 (메인 상단 배치)
+# 엑셀 다운로드 버튼 (메인 상단 배치)
 if not df.empty:
-    st.download_button("📊 조회 결과 엑셀 다운로드", data=create_excel(df), 
-                       file_name=f"대관현황_{start_d}_{end_d}.xlsx", use_container_width=True)
+    st.download_button("📊 조회 결과 엑셀 파일 다운로드", 
+                       data=create_formatted_excel(df, sel_bu), 
+                       file_name=f"대관현황_{start_d}_{end_d}.xlsx", 
+                       use_container_width=True)
 
-# 3. 결과 출력
+# 데이터 출력
 if not df.empty:
     for d_str in sorted(df['full_date'].unique()):
         st.markdown(f'<div class="date-header">🗓️ {d_str} | {get_shift(datetime.strptime(d_str, "%Y-%m-%d").date())}</div>', unsafe_allow_html=True)
-        for bu in BUILDING_ORDER:
+        for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
             if not b_df.empty:
                 st.markdown(f'<div class="bu-row"><span class="bu-header">🏢 {bu}</span></div>', unsafe_allow_html=True)
