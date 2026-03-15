@@ -8,22 +8,17 @@ import io
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. CSS 미디어 쿼리 (가로/세로 디자인 자동 스위칭 핵심)
+# 2. 강제 레이아웃 전환 CSS (더 강력한 셀렉터 사용)
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; max-width: 1100px !important; margin: 0 auto !important; }
     .main-title { font-size: 21px !important; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; }
     
+    /* 건물 헤더 스타일 */
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:20px; }
     .count-text { font-size: 14px; font-weight: bold; }
     
-    .no-data-box { 
-        background-color: #f8f9fa; color: #666; padding: 15px; 
-        border-radius: 8px; text-align: center; font-size: 13px; 
-        margin-top: 10px; border: 1px solid #eee;
-    }
-
-    /* 카드 디자인 (세로용) */
+    /* 카드 디자인 (세로 모드용) */
     .mobile-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
     .card-first-line { display: flex; justify-content: space-between; align-items: center; }
     .place-name { font-weight: bold; color: #333; font-size: 14px; }
@@ -31,14 +26,24 @@ st.markdown("""
     .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; margin-left:5px; }
     .card-second-line { font-size: 11px; color: #888; margin-top: 4px; }
 
-    /* [중복 방지 핵심] 화면 너비에 따른 노출 제어 */
-    /* 768px 이상(가로모드/PC)에서는 카드 숨기기 */
-    @media (min-width: 768px) {
-        div[data-testid="stVerticalBlock"] > div.mobile-container { display: none !important; }
-    }
-    /* 767px 이하(세로모드)에서는 표 숨기기 */
+    /* [핵심] 가로/세로 모드에 따라 요소를 아예 삭제 수준으로 숨김 */
+    
+    /* 1. 모바일 세로 (화면 너비 767px 이하) */
     @media (max-width: 767px) {
-        div[data-testid="stVerticalBlock"] > div.pc-table-container { display: none !important; }
+        .pc-only-table { display: none !important; position: absolute; height: 0; overflow: hidden; }
+        .mobile-only-card { display: block !important; }
+    }
+    
+    /* 2. 가로 모드 및 PC (화면 너비 768px 이상) */
+    @media (min-width: 768px) {
+        .mobile-only-card { display: none !important; position: absolute; height: 0; overflow: hidden; }
+        .pc-only-table { display: block !important; }
+    }
+
+    .no-data-box { 
+        background-color: #f8f9fa; color: #666; padding: 15px; 
+        border-radius: 8px; text-align: center; font-size: 13px; 
+        margin-top: 10px; border: 1px solid #eee;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -97,7 +102,7 @@ st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div
 
 df = get_data(s_date, e_date)
 
-# 엑셀 다운로드 (상단)
+# 엑셀 다운로드 (상단 고정)
 if not df.empty:
     sel_bu_keys = [b.replace(" ", "") for b in sel_bu]
     f_df = df[df['건물명_key'].isin(sel_bu_keys)].copy()
@@ -120,13 +125,13 @@ while curr_day <= e_date:
         st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
         
         if not b_df.empty:
-            # 1. 표 형식 (가로모드용/PC용) - CSS로 모바일에서 숨김
-            st.markdown('<div class="pc-table-container">', unsafe_allow_html=True)
+            # 1. 가로모드용 표 (클래스로 제어)
+            st.markdown('<div class="pc-only-table">', unsafe_allow_html=True)
             st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # 2. 카드 형식 (세로모드용) - CSS로 PC에서 숨김
-            st.markdown('<div class="mobile-container">', unsafe_allow_html=True)
+            # 2. 세로모드용 카드 (클래스로 제어)
+            st.markdown('<div class="mobile-only-card">', unsafe_allow_html=True)
             for _, r in b_df.iterrows():
                 bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
                 st.markdown(f"""
