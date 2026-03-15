@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정
+# 1. 페이지 설정 및 줌 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
@@ -18,7 +18,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# [핵심] allowDay 요일 필터링 원본
+# 2. 데이터 수집 및 allowDay 요일 필터링 원본 로직
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -54,16 +54,33 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 엑셀 생성 함수
+# 3. 엑셀 생성 함수
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('현황')
-        # ... (생략된 엑셀 포맷 로직) ...
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#333333', 'font_color': 'white', 'border': 1, 'align': 'center'})
+        bu_fmt = workbook.add_format({'bold': True, 'bg_color': '#f1f3f5', 'border': 1})
+        cell_fmt = workbook.add_format({'border': 1, 'text_wrap': True})
+        
+        curr_row = 0
+        for d_str in sorted(df['full_date'].unique()):
+            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str}", header_fmt)
+            curr_row += 1
+            for bu in BUILDING_ORDER:
+                if bu in selected_buildings:
+                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
+                    if not b_df.empty:
+                        worksheet.merge_range(curr_row, 0, curr_row, 6, f"📍 {bu} ({len(b_df)}건)", bu_fmt)
+                        curr_row += 1
+                        for _, r in b_df.iterrows():
+                            worksheet.write_row(curr_row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], '-', '-', r['상태']], cell_fmt)
+                            curr_row += 1
+                        curr_row += 1
     return output.getvalue()
 
-# --- 화면 구성 ---
+# --- 화면 출력 레이아웃 ---
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
@@ -74,8 +91,8 @@ with st.sidebar:
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    # [원본] 엑셀 버튼 메인 화면 상단 위치
-    st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
+    # [원본] 엑셀 다운로드 버튼 (메인 상단)
+    st.download_button("📥 엑셀 다운로드 (전체)", data=create_formatted_excel(df, sel_bu), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
 
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
@@ -87,6 +104,7 @@ if not df.empty:
             if not b_df.empty:
                 st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
                 
+                # 당일/기간 대관 분리 로직 적용 시점
                 t_df = b_df[b_df['is_period'] == False]
                 p_df = b_df[b_df['is_period'] == True]
                 
@@ -94,16 +112,4 @@ if not df.empty:
                     if not target_df.empty:
                         st.write(f"**{label}**")
                         if v_mode == "PC":
-                            st.dataframe(target_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
-                        else:
-                            for _, r in target_df.iterrows():
-                                st.markdown(f"""
-                                <div style="border-bottom:1px solid #eee; padding:10px 0;">
-                                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <strong>{r['장소']}</strong>
-                                        <span style="color:#e74c3c; font-size:13px;">{r['시간']}</span>
-                                        <span style="background-color:#27ae60; color:white; padding:2px 5px; border-radius:3px; font-size:11px;">{r['상태']}</span>
-                                    </div>
-                                    <div style="font-size:12px; color:#666; margin-top:3px;">{r['행사명']} | {r['부서']}</div>
-                                </div>
-                                """, unsafe_allow_html=True)
+                            st.dataframe(target_df[['장소', '시간', '
