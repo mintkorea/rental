@@ -5,25 +5,26 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 사이드바 상시 확장
+# 1. 페이지 설정
 st.set_page_config(page_title="성의교정 실시간 대관 현황", page_icon="🏢", layout="wide", initial_sidebar_state="expanded")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일: 스크린샷 디자인 완벽 복제 (타이틀 2.8rem, 건물명 1.2rem)
+# 2. CSS 스타일 (스크린샷 디자인 검증 반영)
 st.markdown("""
 <style>
-    .main-title { font-size: 2.8rem !important; font-weight: 900; color: #1e3a5f; text-align: center; margin: 30px 0; line-height: 1.2; }
+    .main-title { font-size: 2.8rem !important; font-weight: 900; color: #1e3a5f; text-align: center; margin: 30px 0; line-height: 1.1; letter-spacing: -1px; }
+    .date-header { background: #4a4a4a; color: white; padding: 12px 18px; border-radius: 8px; margin: 25px 0 20px 0; font-weight: 700; font-size: 1.15rem; }
+    .bu-row { display: flex; align-items: center; justify-content: space-between; margin-top: 25px; border-bottom: 2px solid #1e3a5f; padding-bottom: 5px; }
     .bu-header { font-size: 1.2rem !important; font-weight: 800; color: #1e3a5f; }
-    .bu-badge { font-size: 11px; background: #e1e8f0; padding: 2px 8px; border-radius: 10px; font-weight: bold; }
-    .date-header { background: #444; color: white; padding: 10px 15px; border-radius: 6px; margin: 25px 0 15px 0; font-weight: bold; font-size: 1.1rem; }
-    .event-shell { border-bottom: 1.5px solid #1e3a5f; padding: 12px 0; }
-    .row-main { display: grid; grid-template-columns: 5.5fr 3.2fr 1.3fr; align-items: center; gap: 4px; width: 100%; }
-    .col-place { font-weight: 700; color: #1e3a5f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .col-time { font-size: 11px; color: #d9534f; font-weight: 600; text-align: center; white-space: nowrap; }
-    .col-status { font-size: 11.5px; font-weight: 800; text-align: right; white-space: nowrap; }
-    .row-sub { font-size: 11.5px; color: #666; margin-top: 6px; line-height: 1.4; }
+    .bu-badge { font-size: 11px; background: #f0f2f6; padding: 3px 10px; border-radius: 12px; font-weight: bold; color: #333; }
+    .event-shell { border-bottom: 1px solid #eee; padding: 15px 0; }
+    .row-main { display: grid; grid-template-columns: 5.2fr 3.5fr 1.3fr; align-items: center; gap: 4px; width: 100%; }
+    .col-place { font-weight: 800; color: #1e3a5f; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .col-time { font-size: 12px; color: #e74c3c; font-weight: 700; text-align: center; white-space: nowrap; }
+    .col-status { font-size: 12px; font-weight: 900; text-align: right; color: #27ae60; white-space: nowrap; }
+    .row-sub { font-size: 11.5px; color: #7f8c8d; margin-top: 8px; line-height: 1.5; font-weight: 500; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -64,7 +65,6 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 엑셀 생성 (관리자님 로직: 행 높이 35 + 서식 반영)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -96,15 +96,15 @@ def create_formatted_excel(df, selected_buildings):
 
 # 5. UI 출력
 with st.sidebar:
-    st.header("🔍 설정")
+    st.header("🔍 조회 설정")
     view_mode = st.radio("📺 보기 모드", ["PC 모드", "모바일(세로)"], index=1)
-    s_date = st.date_input("조회일", value=now_today)
+    s_date = st.date_input("날짜 선택", value=now_today)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
 df = get_data(s_date, s_date)
 if not df.empty:
     with st.sidebar:
-        st.download_button("📥 엑셀 다운로드 (행높이35)", data=create_formatted_excel(df, sel_bu), file_name="대관현황_{0}.xlsx".format(s_date), use_container_width=True)
+        st.download_button("📊 보고용 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name="대관현황_{0}.xlsx".format(s_date), use_container_width=True)
 
 st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
 
@@ -114,13 +114,21 @@ if not df.empty:
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
             if not b_df.empty:
-                st.markdown('<div style="display:flex; align-items:center; justify-content:space-between; margin-top:20px;"><span class="bu-header">🏢 {0}</span><span class="bu-badge">총 {1}건</span></div>'.format(bu, len(b_df)), unsafe_allow_html=True)
+                st.markdown('<div class="bu-row"><span class="bu-header">🏢 {0}</span><span class="bu-badge">총 {1}건</span></div>'.format(bu, len(b_df)), unsafe_allow_html=True)
                 if view_mode == "모바일(세로)":
                     for _, row in b_df.iterrows():
-                        color = "#28a745" if row['상태'] == "확정" else "#d9534f"
-                        p_font = "14px" if len(row['장소']) <= 10 else "11.5px"
-                        st.markdown("""<div class="event-shell"><div class="row-main"><div class="col-place" style="font-size:{0};">📍 {1}</div><div class="col-time">🕒 {2}</div><div class="col-status" style="color:{3};">{4}</div></div><div class="row-sub">📄 {5} ({6}, {7}명, 부스 {8}개)</div></div>""".format(p_font, row['장소'], row['시간'], color, row['상태'], row['행사명'], row['부서'], row['인원'], row['부스']), unsafe_allow_html=True)
+                        p_size = "14px" if len(row['장소']) <= 10 else "11px"
+                        st.markdown("""
+                        <div class="event-shell">
+                            <div class="row-main">
+                                <div class="col-place" style="font-size:{0};">📍 {1}</div>
+                                <div class="col-time">🕒 {2}</div>
+                                <div class="col-status">{3}</div>
+                            </div>
+                            <div class="row-sub">📄 {4}<br>({5}, {6}명, 부스 {7}개)</div>
+                        </div>
+                        """.format(p_size, row['장소'], row['시간'], row['상태'], row['행사명'], row['부서'], row['인원'], row['부스']), unsafe_allow_html=True)
                 else:
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.info("조회된 날짜에 대관 내역이 없습니다.")
