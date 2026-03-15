@@ -5,31 +5,30 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 기존 디자인 CSS 복구
+# 1. 페이지 설정 및 반응형 디자인 CSS
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 2rem !important; max-width: 1000px !important; margin: 0 auto !important; }
-    /* 메인 타이틀 */
-    .main-title { font-size: 21px !important; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; }
-    
-    /* 건물 헤더 디자인 복구 */
-    .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:20px; margin-bottom:10px; }
-    .count-text { font-size: 14px; font-weight: bold; color: #333; }
-    
-    /* 모바일 카드 디자인 복구 */
+    /* 기본 카드 디자인 (모바일용) */
     .mobile-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
     .card-first-line { display: flex; justify-content: space-between; align-items: center; }
     .place-name { font-weight: bold; color: #333; font-size: 14px; }
     .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; }
     .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; margin-left:5px; }
     .card-second-line { font-size: 11px; color: #888; margin-top: 4px; }
-
-    /* 표 디자인 (엑셀 서식 대응) */
-    [data-testid="stDataFrame"] td { padding-left: 10px !important; padding-right: 10px !important; height: auto !important; }
     
-    .no-data-box { background-color: #f8f9fa; color: #666; padding: 15px; border-radius: 8px; text-align: center; font-size: 13px; margin-top: 10px; border: 1px solid #eee; }
+    /* 건물 헤더 및 개수 표시 */
+    .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:20px; }
+    .count-text { font-size: 14px; font-weight: bold; color: #333; }
+
+    /* 화면 표 디자인 대응: 높이 제한 해제 및 여백 */
+    [data-testid="stDataFrame"] td { padding: 8px 10px !important; height: auto !important; }
+
+    /* 반응형 레이아웃: 가로가 넓을 때 표 모드 자동 전환 안내용 */
+    @media (min-width: 800px) {
+        .mobile-only { display: none; }
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -76,7 +75,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 엑셀 생성 (편집용지 여백 10mm + 시간 셀 너비 +2)
+# 4. 엑셀 생성 (여백 10mm, 시간 너비 +2 반영)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -84,7 +83,7 @@ def create_formatted_excel(df, selected_buildings):
         worksheet = workbook.add_worksheet('대관현황')
         worksheet.set_landscape()
         
-        # 편집용지 여백 10mm (0.39인치)
+        # 편집용지 여백 10mm (0.39인치) 설정 [요청사항 반영]
         m = 0.39
         worksheet.set_margins(left=m, right=m, top=m, bottom=m)
 
@@ -113,41 +112,55 @@ def create_formatted_excel(df, selected_buildings):
                             worksheet.write(curr_row, 4, r['인원'], center_fmt); worksheet.write(curr_row, 5, r['부스'], center_fmt)
                             worksheet.write(curr_row, 6, r['상태'], center_fmt); curr_row += 1
                         curr_row += 1
-        worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 14) # 시간 너비 14
+        # 열 너비: 시간 셀(B열) 12 -> 14로 2 확장
+        worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 14)
         worksheet.set_column('C:C', 35); worksheet.set_column('D:D', 18); worksheet.set_column('E:G', 8)
     return output.getvalue()
 
-# 5. 메인 화면 출력
+# 5. 메인 UI 및 화면 출력
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    view_mode = st.radio("📱 보기 모드", ["모바일 (카드)", "PC (표)"], index=0)
+    # 기기 방향에 따른 자동 전환이 어려울 수 있어 선택 옵션 제공 (사용자 편의)
+    view_mode = st.radio("📱 보기 형식", ["모바일 세로 (카드)", "모바일 가로/PC (표)"], index=0)
 
-st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 df = get_data(s_date, e_date)
 
 if not df.empty:
     with st.sidebar:
-        st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
+        st.download_button("📥 전체 결과 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
 
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:20px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color:#444; color:white; padding:8px; border-radius:5px; text-align:center; margin-bottom:10px; font-weight:bold;">📅 {d_str} | 근무조: {get_shift(d_obj)}</div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
-            st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="building-header"><div style="font-size:16px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
             
             if not b_df.empty:
-                if view_mode == "PC (표)":
+                if view_mode == "모바일 가로/PC (표)":
+                    # 가로 모드: 표 형식
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
                 else:
+                    # 세로 모드: 카드 형식 복구
                     for _, r in b_df.iterrows():
-                        bg = '#27ae60' if r['상태']=='확정' else '#95a5a6'
-                        st.markdown(f"""<div class="mobile-card"><div class="card-first-line"><div class="place-name">📍 {r['장소']}</div><div class="status-right"><span class="time-text">🕒 {r['시간']}</span><span class="status-badge" style="background-color:{bg};">{r['상태']}</span></div></div><div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div></div>""", unsafe_allow_html=True)
+                        bg_color = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
+                        st.markdown(f"""
+                            <div class="mobile-card">
+                                <div class="card-first-line">
+                                    <div class="place-name">📍 {r['장소']}</div>
+                                    <div>
+                                        <span class="time-text">🕒 {r['시간']}</span>
+                                        <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
+                                    </div>
+                                </div>
+                                <div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="no-data-box">{bu} 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+                st.info(f"{bu} 대관 내역이 없습니다.")
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.info("조회된 날짜 범위 내에 대관 내역이 없습니다.")
