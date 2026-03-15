@@ -12,7 +12,7 @@ today_now = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
-# 2. CSS (여백 최소화, 시간 우측 끝 배치)
+# 2. CSS (여백 최소화 및 카드 우측 시간 배치)
 st.markdown("""
     <style>
     .block-container { padding: 0.5rem 1rem !important; }
@@ -30,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로직 (날짜/요일 필터링만 집중)
+# 3. 데이터 로직 (요일 매칭 최적화)
 def get_shift(d):
     base = date(2026, 3, 13)
     return f"{['A', 'B', 'C'][(d - base).days % 3]}조"
@@ -44,7 +44,7 @@ def get_data(start_d, end_d):
         return res.json().get('res', [])
     except: return []
 
-# 4. 화면 출력
+# 4. 화면 출력 메인
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 with st.sidebar:
@@ -56,29 +56,26 @@ if len(date_range) == 2:
     s_d, e_d = date_range
     raw_data = get_data(s_d, e_d)
     
-    # 선택된 기간 내의 "개별 날짜"를 돌며 데이터가 있는지 확인
-    found_any = False
+    found_any_data = False # 전체 기간 내 데이터 유무 체크
     curr = s_d
     while curr <= e_d:
-        # 1. 해당 날짜의 요일 인덱스 (0일~6토)
-        wd_idx = str((curr.weekday() + 1) % 7)
+        wd_idx = str((curr.weekday() + 1) % 7) # 일요일=0 기준
         
-        # 2. 해당 날짜에 열리는 행사 필터링
+        # 현재 날짜(curr)에 해당하는 이벤트만 필터링
         day_events = []
         for item in raw_data:
-            # 선택한 건물인지 확인
+            # 건물 필터링
             if str(item.get('buNm', '')).strip().replace(" ", "") in [b.replace(" ", "") for b in sel_bu]:
-                # 해당 날짜가 행사 기간에 포함되고, 해당 요일에 행사가 있는지 확인
                 s_dt = datetime.strptime(item.get('startDt'), '%Y-%m-%d').date()
                 e_dt = datetime.strptime(item.get('endDt'), '%Y-%m-%d').date()
                 allow_days = str(item.get('allowDay', '')).split(',')
                 
+                # 날짜 범위와 요일이 모두 일치하는지 확인
                 if s_dt <= curr <= e_dt and (wd_idx in allow_days or not item.get('allowDay')):
                     day_events.append(item)
 
-        # 3. 필터링된 데이터가 있으면 출력
         if day_events:
-            found_any = True
+            found_any_data = True
             st.markdown(f'<div class="date-bar">📅 {curr} ({WEEKDAYS[int(wd_idx)]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
             
             for bu in sel_bu:
@@ -99,6 +96,6 @@ if len(date_range) == 2:
                         ''', unsafe_allow_html=True)
         curr += timedelta(days=1)
 
-    # 100번 말씀하신 "결과 없을 때" 안내문 (가장 바깥쪽에서 체크)
-    if not found_any:
+    # 안내문 출력 (필터링된 결과가 전혀 없을 때)
+    if not found_any_data:
         st.warning(f"⚠️ {s_d} ~ {e_d} 기간 내 선택하신 건물({', '.join(sel_bu)})의 대관 내역이 없습니다.")
