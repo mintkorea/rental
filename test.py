@@ -5,31 +5,94 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 디자인(CSS)
+# 1. 페이지 설정 및 가로모드 대응 CSS
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 3.5rem !important; }
+    /* 전체 컨테이너 너비 제한 (가로모드 시 휑함 방지) */
+    .block-container { 
+        padding-top: 2rem !important; 
+        max-width: 800px !important; 
+        margin: 0 auto !important; 
+    }
+    
     section[data-testid="stSidebar"] { min-width: 320px !important; }
     
-    /* 메인 타이틀: 기존보다 3pt 키운 21px 적용 */
-    .main-title { font-size: 21px !important; font-weight: bold; color: #1e3a5f; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; }
+    /* 메인 타이틀: 요청하신 21px 적용 */
+    .main-title { 
+        font-size: 21px !important; 
+        font-weight: bold; 
+        color: #1e3a5f; 
+        margin-bottom: 20px; 
+        text-align: left;
+    }
     
-    .event-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
-    .first-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; }
-    .place-name { flex: 1; font-weight: bold; color: #333; font-size: 14px; }
-    .status-right { display: flex; align-items: center; gap: 6px; }
-    .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; }
-    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; }
+    /* 카드 레이아웃 최적화 */
+    .event-card { 
+        padding: 15px 0; 
+        border-bottom: 1px solid #eee; 
+        width: 100%; 
+    }
     
-    .second-line { font-size: 11px; color: #888; margin-top: 4px; }
+    /* 첫 번째 줄: 장소와 시간/상태 (줌 대응을 위해 flex-wrap 추가) */
+    .first-line { 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: flex-start; 
+        flex-wrap: wrap; 
+        gap: 10px; 
+    }
     
-    .building-header { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1e3a5f; padding:4px 0; margin-top:15px; }
-    .count-text { font-size: 14px !important; font-weight: 900 !important; color: #000; }
+    .place-name { 
+        font-weight: bold; 
+        color: #333; 
+        font-size: 15px; 
+        flex: 1; 
+        min-width: 200px; /* 너무 좁아지지 않게 제한 */
+    }
     
-    /* 차분한 내역 없음 메시지 */
-    .no-data-msg { color: #7f8c8d; font-size: 13px; padding: 15px 0; }
+    .status-right { 
+        display: flex; 
+        align-items: center; 
+        gap: 8px; 
+        white-space: nowrap; 
+    }
+    
+    .time-text { font-size: 12px; color: #e74c3c; font-weight: bold; }
+    .status-badge { 
+        padding: 2px 8px; 
+        border-radius: 4px; 
+        font-size: 11px; 
+        font-weight: bold; 
+        color: white; 
+    }
+    
+    .second-line { 
+        font-size: 12px; 
+        color: #666; 
+        margin-top: 6px; 
+        line-height: 1.4;
+    }
+    
+    .building-header { 
+        display:flex; 
+        justify-content:space-between; 
+        align-items:center; 
+        border-bottom:2px solid #1e3a5f; 
+        padding:8px 0; 
+        margin-top:20px; 
+    }
+    
+    .no-data-msg { 
+        color: #999; 
+        font-size: 13px; 
+        padding: 20px 0; 
+        text-align: center; 
+        background: #f9f9f9; 
+        border-radius: 8px;
+        margin: 10px 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -89,28 +152,27 @@ st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div
 
 df = get_data(s_date, e_date)
 
-# --- 엑셀 다운로드 기능 복원 ---
+# 엑셀 다운로드 (복원)
 if not df.empty:
     sel_bu_keys = [b.replace(" ", "") for b in sel_bu]
-    filtered_df_for_excel = df[df['건물명_key'].isin(sel_bu_keys)].copy()
-    
-    if not filtered_df_for_excel.empty:
+    f_df = df[df['건물명_key'].isin(sel_bu_keys)].copy()
+    if not f_df.empty:
         excel_out = io.BytesIO()
         with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
-            filtered_df_for_excel[['full_date', '건물명_raw', '장소', '시간', '행사명', '부서', '상태']].to_excel(writer, index=False)
-        st.download_button("📊 전체 조회 결과 엑셀 다운로드", data=excel_out.getvalue(), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
+            f_df[['full_date', '건물명_raw', '장소', '시간', '행사명', '부서', '상태']].to_excel(writer, index=False)
+        st.download_button("📊 엑셀 다운로드", data=excel_out.getvalue(), file_name=f"대관현황.xlsx", use_container_width=True)
 
-# 날짜별 출력 루프
+# 출력 루프
 curr_day = s_date
 while curr_day <= e_date:
     d_str = curr_day.strftime('%Y-%m-%d')
-    st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:20px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(curr_day)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:#555; color:white; padding:8px; border-radius:6px; text-align:center; margin-top:20px; font-weight:bold; font-size:14px;">📅 {d_str} | {get_shift(curr_day)}</div>', unsafe_allow_html=True)
     
     for bu in sel_bu:
         bu_key = bu.replace(" ", "")
         b_df = df[(df['full_date'] == d_str) & (df['건물명_key'] == bu_key)]
         
-        st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div style="font-weight:bold; color:#333;">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
         
         if not b_df.empty:
             if v_mode == "PC":
@@ -131,7 +193,5 @@ while curr_day <= e_date:
                         </div>
                     """, unsafe_allow_html=True)
         else:
-            # 개별 건물 내역 없음 표출 (사진 요청 사항)
             st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-            
     curr_day += timedelta(days=1)
