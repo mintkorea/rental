@@ -18,7 +18,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# [핵심] allowDay 요일 필터링 원본 로직
+# 2. 데이터 수집 및 allowDay 엄격 필터링
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -54,7 +54,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# [에러 해결] 매개변수 일치시킨 엑셀 생성 함수
+# 3. 엑셀 생성 (원본 규격)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -80,7 +80,7 @@ def create_formatted_excel(df, selected_buildings):
                         curr_row += 1
     return output.getvalue()
 
-# --- 화면 출력부 ---
+# --- 메인 레이아웃 ---
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
@@ -91,7 +91,7 @@ with st.sidebar:
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    # [원본] 엑셀 버튼 메인 상단 위치 및 에러 방지 호출
+    # 엑셀 다운로드 버튼 (메인 상단)
     st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
 
     for d_str in sorted(df['full_date'].unique()):
@@ -102,11 +102,9 @@ if not df.empty:
         for bu in sel_bu:
             bu_clean = bu.replace(" ", "")
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu_clean)]
-            
             if not b_df.empty:
                 st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
                 
-                # 당일/기간 대관 분리
                 t_df = b_df[b_df['is_period'] == False]
                 p_df = b_df[b_df['is_period'] == True]
                 
@@ -118,7 +116,7 @@ if not df.empty:
                         else:
                             for _, r in target_df.iterrows():
                                 st.markdown(f"""
-                                <div style="border-bottom:1px solid #eee; padding:8px 0;">
+                                <div style="border-bottom:1px solid #eee; padding:10px 0;">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <div style="font-weight:bold; font-size:15px;">{r['장소']}</div>
                                         <div style="color:#e74c3c; font-weight:bold; font-size:13px;">{r['시간']}</div>
@@ -128,4 +126,4 @@ if not df.empty:
                                 </div>
                                 """, unsafe_allow_html=True)
 else:
-    st.info("조회된 내역이 없습니다.")
+    st.info("내역이 없습니다.")
