@@ -61,17 +61,4 @@ def get_data(start_date, end_date):
                             '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
                             '행사명': item.get('eventNm', '') or '-',
                             '부서': item.get('mgDeptNm', '') or '-',
-                            '인원': str(item.get('peopleCount', '0')),
-                            '부스': str(item.get('boothCount', '0')),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
-                curr += timedelta(days=1)
-        return pd.DataFrame(rows)
-    except: return pd.DataFrame()
-
-def create_formatted_excel(df, selected_buildings):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
-        worksheet.set_landscape()
-        hdr = workbook.add_format({'bold':True, 'font_size':12, 'bg_color':'#333333', 'font_color':'white', '
+                            '인
