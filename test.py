@@ -18,7 +18,6 @@ st.markdown("""
     header { visibility: hidden; }
     .block-container { padding: 0.5rem 1rem !important; }
     
-    /* 타이틀 */
     .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     
     /* 날짜 바: 간격 55px 규정 준수 */
@@ -58,7 +57,6 @@ def create_excel_report(df, selected_bu):
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
         
-        # 스타일 정의
         t_fmt = workbook.add_format({'bold': True, 'bg_color': '#343a40', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'valign': 'vcenter', 'border': 1})
         h_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'align': 'center', 'valign': 'vcenter', 'border': 1})
@@ -69,34 +67,27 @@ def create_excel_report(df, selected_bu):
             'text_wrap': True, 'shrink': True, 'font_size': 10
         })
 
-        # [규정] 열 넓이 (정수값)
-        worksheet.set_column('A:A', 25) # 장소
-        worksheet.set_column('B:B', 15) # 시간
-        worksheet.set_column('C:C', 50) # 행사명
-        worksheet.set_column('D:D', 25) # 부서
-        worksheet.set_column('E:F', 8)  # 인원, 상태
+        # [엑셀 규정] 열 넓이 (정수값)
+        worksheet.set_column('A:A', 25) 
+        worksheet.set_column('B:B', 15) 
+        worksheet.set_column('C:C', 50) 
+        worksheet.set_column('D:D', 25) 
+        worksheet.set_column('E:F', 8)  
 
         row = 0
         for d_str in sorted(df['full_date'].unique()):
-            # 날짜 바
             worksheet.set_row(row, 30)
             worksheet.merge_range(row, 0, row, 5, f"📅 {d_str}", t_fmt); row += 1
-            
             for bu in selected_bu:
                 b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
-                # 건물 바
                 worksheet.set_row(row, 28)
                 worksheet.merge_range(row, 0, row, 5, f"🏢 {bu} ({len(b_df)}건)", b_fmt); row += 1
-                
-                # 헤더
                 for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']):
                     worksheet.write(row, col, h, h_fmt)
                 row += 1
-                
-                # 데이터 출력
                 if not b_df.empty:
                     for _, r in b_df.sort_values('시간').iterrows():
-                        # [규정] 행 높이 35 고정
+                        # [엑셀 규정] 행 높이 35 고정
                         worksheet.set_row(row, 35)
                         worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt)
                         row += 1
@@ -107,7 +98,7 @@ def create_excel_report(df, selected_bu):
     return output.getvalue()
 
 # ==========================================
-# 3. 데이터 로직 (검색 알고리즘 완벽 복구)
+# 3. 데이터 로직 (검색 알고리즘)
 # ==========================================
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
@@ -153,21 +144,14 @@ with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
         view_mode = st.radio("보기 모드", ["세로 카드", "가로 표"], horizontal=True)
     
     df = get_data(s_date, e_date)
-    
     if not df.empty:
-        st.download_button(
-            label="📥 최종 규격 엑셀 저장",
-            data=create_excel_report(df, sel_bu),
-            file_name=f"대관현황_{s_date}.xlsx",
-            use_container_width=True
-        )
+        st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
 
 # ==========================================
-# 5. 리스트 출력 (가로/세로 전환)
+# 5. 리스트 출력 (가로 표 넓이 고정 반영)
 # ==========================================
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
-    # 2026-03-13 기준 A조 순환 로직
     diff = (t_date - date(2026, 3, 13)).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
@@ -175,8 +159,6 @@ curr = s_date
 while curr <= e_date:
     d_str = curr.strftime('%Y-%m-%d')
     day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
-    
-    # 날짜 바 (55px 마진 적용됨)
     st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
     
     for bu in sel_bu:
@@ -185,10 +167,21 @@ while curr <= e_date:
         
         if not b_df.empty:
             if view_mode == "가로 표":
-                # 가로 모드: 표 형식
-                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'), hide_index=True, use_container_width=True)
+                # [수정] 웹 화면 표의 넓이를 엑셀 규정과 동일한 비율로 강제 고정
+                st.dataframe(
+                    b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'),
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "장소": st.column_config.TextColumn("장소", width="medium"), 
+                        "시간": st.column_config.TextColumn("시간", width="small"),
+                        "행사명": st.column_config.TextColumn("행사명", width="large"), 
+                        "부서": st.column_config.TextColumn("부서", width="medium"),
+                        "인원": st.column_config.TextColumn("인원", width="small"),
+                        "상태": st.column_config.TextColumn("상태", width="small"),
+                    }
+                )
             else:
-                # 세로 모드: 카드 형식
                 for _, r in b_df.sort_values('시간').iterrows():
                     st.markdown(f'''
                         <div class="mobile-card">
@@ -202,5 +195,4 @@ while curr <= e_date:
                     ''', unsafe_allow_html=True)
         else:
             st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-    
     curr += timedelta(days=1)
