@@ -10,14 +10,20 @@ st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="�
 
 st.markdown("""
     <style>
-    .block-container { padding-top: 2rem !important; max-width: 1000px !important; margin: 0 auto !important; }
+    /* 상단 여백 보정: 4rem -> 6rem으로 확대하여 타이틀 상단 여백 확보 */
+    .block-container { padding-top: 6rem !important; max-width: 1000px !important; margin: 0 auto !important; }
+    
     .main-header { font-size: 26px; font-weight: bold; color: #1e3a5f; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; border-bottom: 3px solid #1e3a5f; padding-bottom: 12px; }
+    
     .date-shift-bar {
         background-color: #444; color: white; padding: 15px; border-radius: 8px;
         text-align: center; margin: 25px 0 15px 0; font-weight: bold; font-size: 19px !important;
     }
+    
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:8px 0; margin-top:15px; }
     .count-text { font-size: 15px; font-weight: bold; color: #333; }
+    
+    /* 카드 디자인 */
     .mobile-card { padding: 15px 0; border-bottom: 1px solid #eee; width: 100%; }
     .card-first-line { display: flex; justify-content: space-between; align-items: center; gap: 15px; }
     .place-name { font-weight: bold; color: #333; font-size: 16px; flex: 1; min-width: 0; word-break: break-all; }
@@ -25,6 +31,13 @@ st.markdown("""
     .time-text { font-size: 13px; color: #e74c3c; font-weight: bold; white-space: nowrap; }
     .status-badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; margin-left:8px; white-space: nowrap; }
     .card-second-line { font-size: 13px; color: #666; margin-top: 8px; }
+
+    /* 내역 없음 메시지 스타일 */
+    .no-data-msg {
+        background-color: #f8f9fa; color: #666; padding: 30px; border-radius: 10px;
+        text-align: center; border: 1px dashed #ccc; margin-top: 20px; font-size: 16px;
+    }
+
     div.stDownloadButton > button {
         width: 100%; background-color: #1e3a5f !important; color: white !important;
         border: none !important; padding: 12px !important; border-radius: 8px !important; font-weight: bold !important;
@@ -37,6 +50,7 @@ now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 def get_shift(target_date):
+    # 기준일(2026-03-13, B조)을 바탕으로 조 계산
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
@@ -73,7 +87,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-def create_formatted_excel(df, selected_buildings, report_date):
+def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
@@ -86,7 +100,7 @@ def create_formatted_excel(df, selected_buildings, report_date):
         curr_row = 1
         for d_str in sorted(df['full_date'].unique()):
             d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.set_row(curr_row, 35) # 높이 고정
+            worksheet.set_row(curr_row, 35)
             worksheet.merge_range(curr_row, 0, curr_row, 4, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", hdr_fmt)
             curr_row += 1
             for bu in BUILDING_ORDER:
@@ -118,10 +132,11 @@ with st.sidebar:
     df_res = get_data(s_date, e_date)
     if not df_res.empty:
         fname = f"성의교정 대관 현황 조회 보고({s_date}).xlsx"
-        st.download_button("📥 엑셀 결과 다운로드", data=create_formatted_excel(df_res, sel_bu, s_date), file_name=fname, use_container_width=True)
+        st.download_button("📥 엑셀 결과 다운로드", data=create_formatted_excel(df_res, sel_bu), file_name=fname, use_container_width=True)
 
 st.markdown('<div class="main-header">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
+# 6. 메인 표출 로직
 if not df_res.empty:
     for d_str in sorted(df_res['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
@@ -147,5 +162,9 @@ if not df_res.empty:
                                 <div class="card-second-line">📄 {r['행사명']} | {r['부서']}</div>
                             </div>
                         """, unsafe_allow_html=True)
+            else:
+                # 특정 건물에 내역이 없을 때
+                st.markdown(f'<div style="color:#999; padding:10px; font-size:14px;">{bu} 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
-    st.info("조회된 내역이 없습니다.")
+    # 전체 검색 결과가 없을 때
+    st.markdown('<div class="no-data-msg">🔍 선택하신 기간 및 건물에 대한 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
