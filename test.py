@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 스타일 정의
+# 1. 페이지 설정 및 레이아웃 정의
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 
 st.markdown("""
@@ -16,72 +16,29 @@ st.markdown("""
     /* 타이틀 */
     .main-title { font-size: 18px !important; font-weight: bold; margin-bottom: 20px; display: flex; align-items: center; }
 
+    /* 멀티셀렉트 박스 내 텍스트 줄임 금지 및 전체 표시 */
+    .stMultiSelect span { white-space: normal !important; height: auto !important; }
+    div[data-baseweb="tag"] { height: auto !important; white-space: normal !important; }
+
     /* 모바일 리스트 카드 */
-    .event-card {
-        padding: 12px 0;
-        border-bottom: 1px solid #eee;
-        width: 100%;
-    }
+    .event-card { padding: 12px 0; border-bottom: 1px solid #eee; width: 100%; }
+    .first-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; }
+    .place-name { flex: 1; min-width: 0; font-weight: bold; color: #333; font-size: calc(12px + 0.4vw); line-height: 1.2; white-space: nowrap; overflow: hidden; }
+    .status-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+    .time-text { font-size: 11px; color: #e74c3c; font-weight: bold; white-space: nowrap; }
+    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; white-space: nowrap; }
+    .second-line { font-size: 11px; color: #888; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-    /* 첫 번째 줄: 장소(좌) + 시간/상태(우) */
-    .first-line {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 8px;
-        width: 100%;
-    }
-
-    /* 장소명 */
-    .place-name {
-        flex: 1;
-        min-width: 0;
-        font-weight: bold;
-        color: #333;
-        font-size: calc(12px + 0.4vw);
-        line-height: 1.2;
-        white-space: nowrap;
-        overflow: hidden;
-    }
-
-    /* 우측 고정 영역: 시간 + 상태 배지 */
-    .status-right {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        flex-shrink: 0;
-    }
-
-    .time-text {
-        font-size: 11px;
-        color: #e74c3c;
-        font-weight: bold;
-        white-space: nowrap;
-    }
-
-    .status-badge {
-        padding: 2px 6px;
-        border-radius: 4px;
-        font-size: 10px;
-        font-weight: bold;
-        color: white;
-        white-space: nowrap;
-    }
-
-    /* 두 번째 줄: 행사명 및 부서 */
-    .second-line {
-        font-size: 11px;
-        color: #888;
-        margin-top: 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
+    /* 건물 헤더 스타일 */
+    .building-header { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1e3a5f; padding:4px 0; margin-top:15px; }
+    .count-text { font-size: 13px; font-weight: bold; color: #333; }
     </style>
 """, unsafe_allow_html=True)
 
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
+
+# 건물 목록 (공백 포함 정확한 명칭 관리)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 def get_shift(target_date):
@@ -121,6 +78,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
+# --- 사이드바 ---
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
@@ -128,51 +86,58 @@ with st.sidebar:
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
     v_mode = st.radio("모드", ["모바일", "PC"], horizontal=True)
 
+# --- 메인 화면 ---
 st.markdown('<div class="main-title"><span>📋</span> 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
-# 필터링된 데이터 존재 여부 확인
-if not df.empty:
-    # 건물 필터 적용 후의 데이터 확인
-    filtered_df = df[df['건물명'].str.replace(" ", "").isin([b.replace(" ", "") for b in sel_bu])]
-    
-    if filtered_df.empty:
-        st.info("대관 내역이 없습니다.")
-    else:
-        excel_out = io.BytesIO()
-        with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
-            filtered_df.to_excel(writer, index=False)
-        st.download_button("📊 조회 결과 엑셀 파일 다운로드", data=excel_out.getvalue(), file_name=f"현황.xlsx", use_container_width=True)
+# 1. 원본 데이터에서 선택된 건물만 필터링 (공백 무시 검증)
+if not df.empty and sel_bu:
+    sel_bu_no_space = [b.replace(" ", "") for b in sel_bu]
+    filtered_df = df[df['건물명'].str.replace(" ", "").isin(sel_bu_no_space)].copy()
+else:
+    filtered_df = pd.DataFrame()
 
-        for d_str in sorted(filtered_df['full_date'].unique()):
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:15px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
+# 2. 결과 표출 로직
+if not filtered_df.empty:
+    excel_out = io.BytesIO()
+    with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
+        filtered_df.to_excel(writer, index=False)
+    st.download_button("📊 조회 결과 엑셀 파일 다운로드", data=excel_out.getvalue(), file_name=f"현황.xlsx", use_container_width=True)
+
+    for d_str in sorted(filtered_df['full_date'].unique()):
+        d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
+        st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:15px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
+        
+        for bu in sel_bu:
+            # 건물별 데이터 추출 (엄격 검증)
+            b_df = filtered_df[(filtered_df['full_date'] == d_str) & 
+                               (filtered_df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             
-            for bu in sel_bu:
-                b_df = filtered_df[(filtered_df['full_date'] == d_str) & (filtered_df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
-                if not b_df.empty:
-                    # 수량 표시 강조 수정 (13px, bold)
-                    st.markdown(f'<div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #1e3a5f; padding:4px 0; margin-top:15px;"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div style="font-size:13px; font-weight:bold; color:#333;">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
+            if not b_df.empty:
+                st.markdown(f"""
+                    <div class="building-header">
+                        <div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div>
+                        <div class="count-text">총 {len(b_df)}건</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-                    if v_mode == "PC":
-                        st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
-                    else:
-                        for _, r in b_df.iterrows():
-                            bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
-                            st.markdown(f"""
-                                <div class="event-card">
-                                    <div class="first-line">
-                                        <div class="place-name">📍 {r['장소']}</div>
-                                        <div class="status-right">
-                                            <span class="time-text">🕒 {r['시간']}</span>
-                                            <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
-                                        </div>
-                                    </div>
-                                    <div class="second-line">
-                                        📄 {r['행사명']} | {r['부서']}
+                if v_mode == "PC":
+                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
+                else:
+                    for _, r in b_df.iterrows():
+                        bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
+                        st.markdown(f"""
+                            <div class="event-card">
+                                <div class="first-line">
+                                    <div class="place-name">📍 {r['장소']}</div>
+                                    <div class="status-right">
+                                        <span class="time-text">🕒 {r['시간']}</span>
+                                        <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
                                     </div>
                                 </div>
-                            """, unsafe_allow_html=True)
+                                <div class="second-line">📄 {r['행사명']} | {r['부서']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
 else:
     st.info("대관 내역이 없습니다.")
