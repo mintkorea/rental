@@ -5,22 +5,15 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 디자인 CSS
-st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
-
+# [웹 UI 설정 생략 - 이전과 동일]
+st.set_page_config(page_title="성희교정 대관 현황 조회", page_icon="📋", layout="wide")
 st.markdown("""
     <style>
     .block-container { padding-top: 5rem !important; max-width: 1000px !important; margin: 0 auto !important; }
-    .main-header { 
-        font-size: 24px; font-weight: bold; color: #1e3a5f; 
-        margin-bottom: 20px; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px;
-        white-space: normal !important; overflow-wrap: break-word !important; line-height: 1.3;
-    }
+    .main-header { font-size: 24px; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px; white-space: normal; overflow-wrap: break-word; line-height: 1.3; }
     .date-shift-bar { background-color: #444; color: white; padding: 12px; border-radius: 8px; text-align: center; margin: 20px 0 10px 0; font-weight: bold; font-size: 17px !important; }
     .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:5px 0; margin-top:10px; }
     .count-text { font-size: 14px; font-weight: bold; color: #333; }
-    
-    /* 세로 모드 줄간격 최적화 */
     .mobile-card { padding: 6px 0; border-bottom: 1px solid #eee; width: 100%; }
     .card-first-line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .place-name { font-weight: bold; color: #333; font-size: 15px; flex: 1; min-width: 0; line-height: 1.2; }
@@ -28,7 +21,6 @@ st.markdown("""
     .time-text { font-size: 12px; color: #e74c3c; font-weight: bold; }
     .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; }
     .card-second-line { font-size: 12px; color: #666; margin-top: 1px; line-height: 1.2; }
-    
     div.stDownloadButton > button { width: 100%; background-color: #1e3a5f !important; color: white !important; border: none !important; padding: 10px !important; border-radius: 8px !important; font-weight: bold !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -54,17 +46,11 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
-            # [수정] allowDay 파싱 로직 강화
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
-            
             curr = s_dt
             while curr <= e_dt:
-                # 1. 요청한 날짜 범위 내에 있는지 확인
                 if start_date <= curr <= end_date:
-                    # 2. allowDay 조건 확인 (비어있으면 매일, 있으면 해당 요일만)
-                    # curr.isoweekday(): 월=1, ..., 일=7
                     if not allowed_days or str(curr.isoweekday()) in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
@@ -79,39 +65,51 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 엑셀 생성 및 UI 로직 (이전과 동일)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
-        worksheet.set_landscape()
-        m = 0.39
-        worksheet.set_margins(left=m, right=m, top=m, bottom=m)
         
-        common = {'border': 1, 'valign': 'vcenter', 'text_wrap': True, 'shrink': True, 'font_size': 10}
-        date_hdr_fmt = workbook.add_format({'bold': 1, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-        bu_fmt = workbook.add_format({'bold': 1, 'bg_color': '#EBF1F8', 'align': 'left', 'valign': 'vcenter', 'border': 1, 'indent': 1})
-        col_hdr_fmt = workbook.add_format({'bold': 1, 'bg_color': '#F2F2F2', 'align': 'center', 'valign': 'vcenter', 'border': 1})
+        # 페이지 설정: 가로 방향 및 가로 중앙 정렬
+        worksheet.set_landscape()
+        worksheet.center_horizontally()
+        
+        # 포맷 설정
+        title_fmt = workbook.add_format({'bold': True, 'font_size': 18, 'align': 'center', 'valign': 'vcenter'})
+        date_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 15, 'bg_color': '#333333', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
+        bu_fmt = workbook.add_format({'bold': True, 'font_size': 13, 'bg_color': '#EBF1F8', 'align': 'left', 'valign': 'vcenter', 'border': 1, 'indent': 1})
+        col_hdr_fmt = workbook.add_format({'bold': True, 'font_size': 11, 'bg_color': '#F2F2F2', 'align': 'center', 'valign': 'vcenter', 'border': 1})
+        
+        # 기본 데이터 포맷 (11pt)
+        common = {'border': 1, 'valign': 'vcenter', 'text_wrap': True, 'shrink': True, 'font_size': 11}
         left_fmt = workbook.add_format({**common, 'align': 'left', 'indent': 1})
         center_fmt = workbook.add_format({**common, 'align': 'center'})
+        empty_fmt = workbook.add_format({**common, 'align': 'center', 'font_color': '#999999'})
 
-        curr_row = 1
+        # 1. 메인 타이틀
+        worksheet.merge_range('A1:E1', "성희교정 대관 현황", title_fmt)
+        worksheet.set_row(0, 40)
+        
+        curr_row = 2
         dates = sorted(df['full_date'].unique()) if not df.empty else [now_today.strftime('%Y-%m-%d')]
         for d_str in dates:
             d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
             worksheet.set_row(curr_row, 35)
             worksheet.merge_range(curr_row, 0, curr_row, 4, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", date_hdr_fmt)
             curr_row += 1
+            
             for bu in BUILDING_ORDER:
                 if bu in selected_buildings:
                     b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))] if not df.empty else pd.DataFrame()
-                    worksheet.set_row(curr_row, 35)
+                    worksheet.set_row(curr_row, 30)
                     worksheet.merge_range(curr_row, 0, curr_row, 4, f"  📍 {bu} (총 {len(b_df)}건)", bu_fmt)
                     curr_row += 1
+                    
                     if not b_df.empty:
                         worksheet.set_row(curr_row, 25)
-                        for i, h in enumerate(['장소', '시간', '행사명', '부서', '상태']): worksheet.write(curr_row, i, h, col_hdr_fmt)
+                        for i, h in enumerate(['장소', '시간', '행사명', '부서명', '상태']):
+                            worksheet.write(curr_row, i, h, col_hdr_fmt)
                         curr_row += 1
                         for _, r in b_df.iterrows():
                             worksheet.set_row(curr_row, 35)
@@ -123,12 +121,20 @@ def create_formatted_excel(df, selected_buildings):
                             curr_row += 1
                     else:
                         worksheet.set_row(curr_row, 30)
-                        worksheet.merge_range(curr_row, 0, curr_row, 4, "대관 내역이 없습니다.", center_fmt)
+                        worksheet.merge_range(curr_row, 0, curr_row, 4, "대관 내역이 없습니다.", empty_fmt)
                         curr_row += 1
                     curr_row += 1
-        worksheet.set_column('A:A', 25); worksheet.set_column('B:B', 14); worksheet.set_column('C:C', 35); worksheet.set_column('D:D', 20); worksheet.set_column('E:E', 8)
+
+        # 열 너비 설정 (장소 32, 시간 15, 행사명 42, 부서명 25, 상태 8)
+        worksheet.set_column('A:A', 32)
+        worksheet.set_column('B:B', 15)
+        worksheet.set_column('C:C', 42)
+        worksheet.set_column('D:D', 25)
+        worksheet.set_column('E:E', 8)
+        
     return output.getvalue()
 
+# [UI 구성]
 with st.sidebar:
     st.header("⚙️ 설정 및 도구")
     view_mode = st.radio("📱 보기 모드 설정", ["세로 모드 (카드)", "가로 모드 (표)"], index=0)
@@ -136,12 +142,12 @@ with st.sidebar:
     e_date = st.date_input("조회 종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
     df_result = get_data(s_date, e_date)
-    st.download_button(label="📥 엑셀 결과 다운로드", data=create_formatted_excel(df_result, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+    # 파일명 설정: 성희교정 대관 현황(날짜).xlsx
+    st.download_button(label="📥 엑셀 결과 다운로드", data=create_formatted_excel(df_result, sel_bu), file_name=f"성희교정 대관 현황({s_date}).xlsx", use_container_width=True)
 
-st.markdown('<div class="main-header">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
-
+st.markdown('<div class="main-header">📋 성희교정 대관 현황 조회</div>', unsafe_allow_html=True)
+# [이후 웹 표출 로직 동일...]
 if not df_result.empty:
-    col_config = {"장소": st.column_config.TextColumn("장소", width=180), "시간": st.column_config.TextColumn("시간", width=110), "행사명": st.column_config.TextColumn("행사명", width=300), "부서": st.column_config.TextColumn("부서", width=144), "상태": st.column_config.TextColumn("상태", width=80)}
     for d_str in sorted(df_result['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
         st.markdown(f'<div class="date-shift-bar">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
@@ -150,7 +156,7 @@ if not df_result.empty:
             st.markdown(f'<div class="building-header"><div style="font-size:16px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
             if not b_df.empty:
                 if view_mode == "가로 모드 (표)":
-                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True, column_config=col_config)
+                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
                 else:
                     for _, r in b_df.iterrows():
                         bg = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
