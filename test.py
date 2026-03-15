@@ -7,6 +7,27 @@ import io
 
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
+
+# 화면 노출 표 디자인 서식 대응 (CSS)
+# 엑셀처럼 좌우 여백 10px 및 기본 정렬 서식 적용, 행 높이 35 제한 해제
+st.markdown("""
+    <style>
+    /* 표 헤더 서식 */
+    [data-testid="stTable"] th, [data-testid="stDataFrame"] th {
+        background-color: #f1f3f5 !important;
+        padding: 10px !important;
+        text-align: center !important;
+    }
+    /* 표 셀 서식: 좌우 여백 10px 적용 및 높이 고정 해제 */
+    [data-testid="stTable"] td, [data-testid="stDataFrame"] td {
+        padding: 10px 10px !important; /* 좌우 10px 여백 */
+        vertical-align: middle !important;
+        line-height: 1.5 !important; /* 가독성을 위한 줄간격 */
+    }
+    /* 특정 열 정렬 대응 (데이터프레임의 특성상 CSS로 인덱스 기반 정렬) */
+    </style>
+""", unsafe_allow_html=True)
+
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
@@ -17,11 +38,6 @@ def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
-
-def get_weekday_names(codes):
-    days = {"1":"월", "2":"화", "3":"수", "4":"목", "5":"금", "6":"토", "7":"일"}
-    if not codes: return ""
-    return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
 
 # 3. 데이터 수집 및 필터링
 @st.cache_data(ttl=60)
@@ -44,7 +60,6 @@ def get_data(start_date, end_date):
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
                     curr_wd = str(curr.isoweekday())
-                    # allowDay 엄격 필터링
                     if not allowed_days or curr_wd in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
@@ -62,7 +77,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 엑셀 생성 (높이 35, 폰트 자동조정 적용)
+# 4. 엑셀 생성
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -77,11 +92,13 @@ def create_formatted_excel(df, selected_buildings):
         })
         bu_fmt = workbook.add_format({
             'bold': True, 'font_size': 11, 'bg_color': '#EBF1F8', 
-            'align': 'left', 'valign': 'vcenter', 'border': 1
+            'align': 'left', 'valign': 'vcenter', 'border': 1,
+            'indent': 1 # 좌측 여백 대응
         })
-        # 줄바꿈 + 폰트 자동 줄임(shrink) 적용
+        # 줄바꿈 + 좌우여백 10(Excel 인덴트 및 서식으로 대응)
         left_fmt = workbook.add_format({
-            'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'shrink': True
+            'border': 1, 'align': 'left', 'valign': 'vcenter', 'text_wrap': True, 'shrink': True,
+            'left_padding': 10, 'right_padding': 10 # 여백 대응
         })
         center_fmt = workbook.add_format({
             'border': 1, 'align': 'center', 'valign': 'vcenter', 'shrink': True
@@ -90,27 +107,22 @@ def create_formatted_excel(df, selected_buildings):
         curr_row = 1
         for d_str in sorted(df['full_date'].unique()):
             d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            
-            # 날짜 헤더 행 높이 35
             worksheet.set_row(curr_row, 35)
             worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", date_hdr_fmt)
             curr_row += 1
             
             for bu in BUILDING_ORDER:
                 if bu in selected_buildings:
-                    # 중복 방지: 완전 일치 매칭
                     bu_clean = bu.replace(" ", "")
                     b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu_clean)]
                     
                     if not b_df.empty:
-                        # 건물명 행 높이 35
                         worksheet.set_row(curr_row, 35)
                         worksheet.merge_range(curr_row, 0, curr_row, 6, f"  📍 {bu}", bu_fmt)
                         curr_row += 1
                         
                         for _, r in b_df.iterrows():
-                            # 데이터 행 높이 35 고정
-                            worksheet.set_row(curr_row, 35)
+                            worksheet.set_row(curr_row, 35) # 엑셀은 35 유지
                             worksheet.write(curr_row, 0, r['장소'], left_fmt)
                             worksheet.write(curr_row, 1, r['시간'], center_fmt)
                             worksheet.write(curr_row, 2, r['행사명'], left_fmt)
@@ -121,9 +133,9 @@ def create_formatted_excel(df, selected_buildings):
                             curr_row += 1
                         curr_row += 1
 
-        # 열 너비 설정
+        # 열 너비 설정 (시간 셀 너비 12 -> 14로 2 키움)
         worksheet.set_column('A:A', 20)  # 장소
-        worksheet.set_column('B:B', 12)  # 시간
+        worksheet.set_column('B:B', 14)  # 시간 (기존 12에서 +2 적용)
         worksheet.set_column('C:C', 35)  # 행사명
         worksheet.set_column('D:D', 18)  # 부서
         worksheet.set_column('E:G', 7)   # 인원, 부스, 상태
@@ -161,6 +173,7 @@ if not df.empty:
                 
                 if not t_df.empty:
                     st.write("**📌 당일 대관**")
+                    # 화면 표 출력: 높이 35px 지정 없이 유동적으로 노출
                     st.dataframe(t_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
                 
                 if not p_df.empty:
