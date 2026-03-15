@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 CSS (폰트 크기 대폭 강화)
+# 1. 페이지 설정 및 CSS
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -13,14 +13,13 @@ now_today = datetime.now(KST).date()
 st.markdown("""
     <style>
     .block-container { padding: 0.5rem 1rem !important; }
-    /* 타이틀 폰트 확대 (28px) */
+    header {visibility: hidden;}
     .main-title { font-size: 28px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
-    /* 날짜바 폰트 확대 (18px) */
     .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 12px; font-size: 18px; }
-    /* 건물 헤더 폰트 확대 (20px) */
     .bu-header { font-size: 20px; font-weight: bold; color: #1E3A5F; margin: 15px 0 8px 0; border-left: 6px solid #1E3A5F; padding-left: 12px; background: #f1f4f9; padding-top: 5px; padding-bottom: 5px; }
+    .no-data { color: #7f8c8d; font-size: 14px; padding: 12px; background: #f8f9fa; border-radius: 4px; border: 1px dashed #ced4da; margin-bottom: 10px; }
     
-    .no-data { color: #7f8c8d; font-size: 14px; padding: 12px; background: #f8f9fa; border-radius: 4px; border: 1px dashed #ced4da; }
+    /* 카드 스타일 (시간 우측 배치) */
     .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 15px; margin-bottom: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .row-1 { display: flex; justify-content: space-between; align-items: center; }
     .loc-text { font-size: 15px; font-weight: 800; color: #1E3A5F; }
@@ -28,9 +27,6 @@ st.markdown("""
     .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; }
     .status-y { background-color: #2ecc71; } .status-n { background-color: #95a5a6; }
     .row-2 { font-size: 13px; color: #333; border-top: 1px solid #f8f9fa; margin-top: 6px; padding-top: 6px; }
-    
-    /* 사이드바 열기 안내문 */
-    .sidebar-hint { font-size: 12px; color: #666; margin-bottom: 10px; text-align: left; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,14 +38,16 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# 2. 엑셀 생성 (기존 포맷 유지)
+# 2. 엑셀 생성 함수
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
+        workbook = writer.book
+        worksheet = workbook.add_worksheet('대관현황')
         hdr_fmt = workbook.add_format({'bold':True,'bg_color':'#333333','font_color':'white','align':'center','border':1})
         bu_fmt = workbook.add_format({'bold':True,'bg_color':'#EBF1F8','border':1})
         cell_fmt = workbook.add_format({'border':1,'align':'center','valign':'vcenter','text_wrap':True})
+        
         curr_row = 0
         for d_str in sorted(df['full_date'].unique()):
             d_df = df[df['full_date'] == d_str]
@@ -87,15 +85,17 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. UI 출력
-st.markdown('<div class="sidebar-hint">⬅️ 왼쪽 화살표(>)를 눌러 날짜와 건물을 설정하세요.</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
-
+# 4. 사이드바 설정
 with st.sidebar:
-    st.header("🔍 설정")
+    st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
+    # 모드 전환 버튼 복구
+    view_mode = st.radio("보기 모드", ["세로 카드", "가로 표"])
     sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+
+# 5. 메인 출력
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
@@ -111,12 +111,26 @@ if not df.empty:
         
         for bu in sel_bu:
             b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")] if not day_df.empty else pd.DataFrame()
-            # 건물명 옆에 건수 표시 복구
             st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+            
             if not b_df.empty:
-                for _, r in b_df.sort_values('시간').iterrows():
-                    s_cls = "status-y" if r['상태'] == '확정' else "status-n"
-                    st.markdown(f'<div class="mobile-card"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge {s_cls}">{r["상태"]}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div></div>', unsafe_allow_html=True)
+                if view_mode == "가로 표":
+                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '상태']], hide_index=True, use_container_width=True)
+                else:
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        s_cls = "status-y" if r['상태'] == '확정' else "status-n"
+                        st.markdown(f'''
+                            <div class="mobile-card">
+                                <div class="row-1">
+                                    <span class="loc-text">📍 {r["장소"]}</span>
+                                    <span class="time-text">🕒 {r["시간"]}</span>
+                                    <span class="status-badge {s_cls}">{r["상태"]}</span>
+                                </div>
+                                <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
+                            </div>
+                        ''', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
         curr += timedelta(days=1)
+else:
+    st.warning("조회된 내역이 없습니다.")
