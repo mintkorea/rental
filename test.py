@@ -147,3 +147,4 @@ while curr_day <= e_date:
             st.markdown('<div class="no-data-msg">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
             
     curr_day += timedelta(days=1)
+
