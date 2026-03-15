@@ -3,9 +3,8 @@ import requests
 import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
-import io
 
-# 1. 페이지 설정 및 CSS (날짜 바 상단 간격 대폭 추가)
+# 1. 페이지 설정 및 강력한 우측 정렬 CSS
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -13,47 +12,48 @@ now_today = datetime.now(KST).date()
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
-    .block-container { padding: 0.5rem 1rem !important; }
     header { visibility: hidden; }
+    .block-container { padding: 0.5rem 1rem !important; }
     
-    .main-title { font-size: 24px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 15px; }
+    .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     
-    /* [핵심 수정] 날짜 바: 이전 데이터와의 간격을 위해 상단 여백(margin-top) 40px 추가 */
-    .date-bar { 
-        background-color: #343a40; 
-        color: white; 
-        padding: 12px; 
-        border-radius: 6px; 
-        text-align: center; 
-        font-weight: bold; 
-        margin-top: 40px; 
-        margin-bottom: 15px; 
-        font-size: 16px; 
-    }
-    /* 첫 번째 날짜 바는 맨 위에 있으므로 간격 제외 */
+    /* 날짜 바 간격 유지 */
+    .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 35px; margin-bottom: 12px; font-size: 15px; }
     .date-bar:first-of-type { margin-top: 0px; }
 
-    .bu-header { font-size: 18px; font-weight: bold; color: #1E3A5F; margin: 15px 0 8px 0; border-left: 6px solid #1E3A5F; padding-left: 10px; background: #f1f4f9; padding: 6px 10px; }
+    .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 12px 0 6px 0; border-left: 5px solid #1E3A5F; padding-left: 10px; background: #f1f4f9; padding: 5px 10px; }
     
-    /* 카드 스타일 및 첫 행 개행 방지 */
-    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    /* [카드 모드] 폰트 축소 및 시간 우측 끝 강제 밀기 */
+    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    
     .row-1 { 
         display: flex; 
-        justify-content: space-between; 
         align-items: center; 
         white-space: nowrap; 
-        gap: 8px;
+        width: 100%;
     }
-    .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; }
-    .time-text { font-size: 13px; font-weight: 700; color: #e74c3c; flex-shrink: 0; }
-    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; background-color: #2ecc71; flex-shrink: 0; }
     
-    .row-2 { font-size: 12px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 6px; }
-    .no-data { color: #7f8c8d; font-size: 13px; padding: 15px; background: #f8f9fa; border-radius: 6px; border: 1px dashed #ced4da; text-align: center; }
+    .loc-text { font-size: 13px; font-weight: 800; color: #1E3A5F; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    
+    /* [핵심] 시간을 오른쪽 끝에 붙이는 스타일 */
+    .time-text { 
+        font-size: 12px; 
+        font-weight: 700; 
+        color: #e74c3c; 
+        margin-left: auto; /* 왼쪽 마진을 최대로 주어 오른쪽으로 밀어냄 */
+        margin-right: 8px; /* 배지와의 간격 */
+        flex-shrink: 0;
+    }
+    
+    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; color: white; font-weight: bold; background-color: #2ecc71; flex-shrink: 0; }
+    
+    .row-2 { font-size: 11px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 5px; margin-top: 5px; }
+    
+    .no-data { color: #7f8c8d; font-size: 12px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px dashed #ced4da; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 고정 설정
+# 2. 고정 설정 및 데이터 로직
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 
@@ -71,7 +71,8 @@ def get_data(start_date, end_date):
         raw, rows = res.json().get('res', []), []
         for item in raw:
             if not item.get('startDt'): continue
-            s_dt, e_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date(), datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
+            e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             allowed = [d.strip() for d in str(item.get('allowDay', '')).split(",") if d.strip().isdigit()]
             curr = s_dt
             while curr <= e_dt:
@@ -85,24 +86,22 @@ def get_data(start_date, end_date):
 # 3. 화면 구성
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-with st.expander("🔍 조회 설정 (날짜/건물)", expanded=True):
+with st.expander("🔍 설정 (날짜/건물)", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
         s_date = st.date_input("시작일", value=now_today)
         e_date = st.date_input("종료일", value=s_date)
     with c2:
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
-        view_mode = st.radio("보기 모드", ["세로 카드", "가로 표"], horizontal=True)
+        view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
 
 df = get_data(s_date, e_date)
 
-# 4. 결과 출력 (일관성 유지)
+# 4. 출력
 curr = s_date
 while curr <= e_date:
     d_str = curr.strftime('%Y-%m-%d')
     day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
-    
-    # 이 부분에서 margin-top: 40px 스타일이 적용된 date-bar가 출력됩니다.
     st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
     
     for bu in sel_bu:
