@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 import pytz
 import io
 
@@ -12,28 +12,22 @@ now_today = datetime.now(KST).date()
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. 웹 화면 CSS (세로 2줄 / 가로 표 셸 너비 고정)
+# 2. 웹 화면 CSS
 st.markdown("""
     <style>
-    .block-container { padding: 1rem !important; max-width: 100% !important; }
+    .block-container { padding: 1rem !important; }
     .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; border: 1px solid #dee2e6; }
-    .custom-table th { background-color: #f8f9fa; color: #1E3A5F; padding: 10px; border: 1px solid #dee2e6; font-size: 13px; font-weight: 800; }
+    .custom-table th { background-color: #f8f9fa; padding: 10px; border: 1px solid #dee2e6; font-size: 13px; font-weight: 800; }
     .custom-table td { padding: 10px; border: 1px solid #dee2e6; text-align: center; font-size: 13px; vertical-align: middle; word-break: break-all; }
-    
-    /* 웹 가로 모드 비율 (요청하신 엑셀 비율 기반 최적화) */
-    .col-1 { width: 20%; } .col-2 { width: 15%; } .col-3 { width: 35%; } .col-4 { width: 20%; } .col-5 { width: 5%; } .col-6 { width: 5%; }
-
     .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 8px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
-    .row-1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .info-main { font-size: 14px; font-weight: 800; color: #1E3A5F; display: flex; gap: 8px; }
-    .info-time { color: #e74c3c; font-weight: 700; }
-    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; color: white; }
+    .row-1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 14px; font-weight: 800; }
+    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; color: white; font-weight: bold; }
     .status-y { background-color: #2ecc71; } .status-n { background-color: #95a5a6; }
     .row-2 { font-size: 12px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 6px; }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로직 (생략)
+# 3. 데이터 로직
 def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
@@ -66,17 +60,17 @@ def get_data(d):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 엑셀 출력 (요청하신 열 너비 및 자동 줄바꿈/축소 적용)
+# 4. 엑셀 출력 (지시하신 너비 및 개행/축소 로직 완벽 적용)
 def create_excel(df, selected_buildings, d_str, shift):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
         
-        hdr_fmt = workbook.add_format({'bold':True,'font_size':12,'bg_color':'#333333','font_color':'white','align':'center','valign':'vcenter','border':1})
-        bu_fmt = workbook.add_format({'bold':True,'font_size':11,'bg_color':'#EBF1F8','align':'left','valign':'vcenter','border':1})
-        # [핵심] 텍스트가 넘치면 줄바꿈(text_wrap)하고, 그래도 넘치면 폰트 축소(shrink)
-        cell_fmt = workbook.add_format({'border':1,'align':'center','valign':'vcenter','text_wrap':True,'shrink':True}) 
+        hdr_fmt = workbook.add_format({'bold':True, 'font_size':12, 'bg_color':'#333333', 'font_color':'white', 'align':'center', 'valign':'vcenter', 'border':1})
+        bu_fmt = workbook.add_format({'bold':True, 'font_size':11, 'bg_color':'#EBF1F8', 'align':'left', 'valign':'vcenter', 'border':1})
+        # 텍스트 줄바꿈(text_wrap) 우선 적용, 넘치면 축소(shrink)
+        cell_fmt = workbook.add_format({'border':1, 'align':'center', 'valign':'vcenter', 'text_wrap':True, 'shrink':True})
         
         curr_row = 0
         worksheet.set_row(curr_row, 35)
@@ -87,4 +81,53 @@ def create_excel(df, selected_buildings, d_str, shift):
             if bu in selected_buildings:
                 b_df = df[df['건물명'].str.replace(" ","") == bu.replace(" ","")]
                 if not b_df.empty:
-                    worksheet.set_row(curr_row,
+                    worksheet.set_row(curr_row, 35)
+                    worksheet.merge_range(curr_row, 0, curr_row, 5, f"  📍 {bu}", bu_fmt)
+                    curr_row += 1
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        worksheet.set_row(curr_row, 35) # 행 높이 35 고정
+                        worksheet.write_row(curr_row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], cell_fmt)
+                        curr_row += 1
+        
+        # 지정하신 열 너비 적용
+        worksheet.set_column('A:A', 25) # 장소
+        worksheet.set_column('B:B', 15) # 시간
+        worksheet.set_column('C:C', 44) # 행사명
+        worksheet.set_column('D:D', 25) # 부서
+        worksheet.set_column('E:E', 6)  # 인원
+        worksheet.set_column('F:F', 6)  # 상태
+        
+    return output.getvalue()
+
+# 5. UI 메인
+with st.sidebar:
+    st.header("🔍 설정")
+    view_mode = st.radio("보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"])
+    target_date = st.date_input("날짜", value=now_today)
+    sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+
+df = get_data(target_date)
+
+if not df.empty:
+    with st.sidebar:
+        shift_val = get_shift(target_date)
+        st.download_button("📥 엑셀 출력", data=create_excel(df, sel_bu, target_date.strftime("%Y-%m-%d"), shift_val), 
+                           file_name=f"대관현황_{target_date}.xlsx", use_container_width=True)
+
+    st.markdown(f'<div style="background-color:#343a40; color:white; padding:10px; border-radius:6px; text-align:center; font-weight:bold; margin-bottom:15px;">📅 {target_date.strftime("%Y-%m-%d")} | 근무조: {shift_val}</div>', unsafe_allow_html=True)
+    
+    for bu in sel_bu:
+        b_df = df[df['건물명'].str.replace(" ", "") == bu.replace(" ", "")]
+        if not b_df.empty:
+            st.markdown(f'<div style="font-size:17px; font-weight:bold; color:#1E3A5F; margin:20px 0 8px 0; border-left:5px solid #1E3A5F; padding-left:10px;">🏢 {bu}</div>', unsafe_allow_html=True)
+            if view_mode == "가로 모드 (표)":
+                html = '<table class="custom-table"><thead><tr><th style="width:20%">장소</th><th style="width:15%">시간</th><th style="width:35%">행사명</th><th style="width:20%">부서</th><th style="width:5%">인원</th><th style="width:5%">상태</th></tr></thead><tbody>'
+                for _, r in b_df.sort_values('시간').iterrows():
+                    html += f'<tr><td>{r["장소"]}</td><td>{r["시간"]}</td><td style="text-align:left;">{r["행사명"]}</td><td>{r["부서"]}</td><td>{r["인원"]}</td><td>{r["상태"]}</td></tr>'
+                st.markdown(html + '</tbody></table>', unsafe_allow_html=True)
+            else:
+                for _, r in b_df.sort_values('시간').iterrows():
+                    s_cls = "status-y" if r['상태'] == '확정' else "status-n"
+                    st.markdown(f'<div class="mobile-card"><div class="row-1"><div>📍 {r["장소"]} <span style="color:#e74c3c; margin-left:8px;">🕒 {r["시간"]}</span></div><span class="status-badge {s_cls}">{r["status_val" if False else r["상태"]]}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div></div>', unsafe_allow_html=True)
+else:
+    st.info("조회된 내역이 없습니다.")
