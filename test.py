@@ -3,170 +3,124 @@ import requests
 import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
-import io
 
-# 1. 페이지 설정 및 디자인 CSS
-st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
+# 1. 페이지 설정
+st.set_page_config(page_title="성의교정 대관 조회", layout="wide")
 
+# 2. 고정 디자인 CSS (헤드 영역)
 st.markdown("""
-    <style>
-    /* 로컬 테스트 기반 상단 여백 및 컨테이너 최적화 */
-    .block-container { padding-top: 5rem !important; max-width: 1100px !important; margin: 0 auto !important; }
+<style>
+    .block-container { padding-top: 3rem; max-width: 1000px; margin: 0 auto; }
+    .main-title { font-size: 24px; font-weight: bold; color: #1e3a5f; padding-bottom: 10px; border-bottom: 3px solid #1e3a5f; }
+    .date-bar { background-color: #444; color: white; padding: 10px; border-radius: 5px; text-align: center; margin: 15px 0; font-weight: bold; }
+    .bu-header { background-color: white; border-bottom: 2px solid #1e3a5f; padding: 5px 0; margin-top: 15px; font-weight: bold; color: #1e3a5f; display: flex; justify-content: space-between; }
     
-    .main-header { font-size: 24px; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px; }
+    /* 표 고정 레이아웃 */
+    table.custom-table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 5px 0 15px 0; background-color: white; }
+    table.custom-table th, table.custom-table td { border: 1px solid #ddd; padding: 6px 3px; text-align: center; vertical-align: middle; height: 45px; overflow: hidden; }
+    table.custom-table th { background-color: #f8f9fa; font-size: 13px; }
     
-    .date-shift-bar {
-        background-color: #444; color: white; padding: 12px; border-radius: 8px;
-        text-align: center; margin: 15px 0 10px 0; font-weight: bold; font-size: 18px !important;
-    }
+    /* 너비 고정 (장소:20%, 시간:15%, 행사:40%, 부서:18%, 상태:7%) */
+    .w-place { width: 20%; } .w-time { width: 15%; } .w-event { width: 40%; } .w-dept { width: 18%; } .w-status { width: 7%; }
     
-    .building-header { display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:6px 0; margin-top:12px; }
-    .count-text { font-size: 14px; font-weight: bold; color: #333; }
-
-    /* [검증 필] HTML 표 고정 레이아웃 엔진 - 컬럼 너비 절대 고정 */
-    .fixed-table {
-        width: 100%;
-        table-layout: fixed; /* 브라우저가 셀 내용에 상관없이 너비를 강제 고정하게 함 */
-        border-collapse: collapse;
-        margin-top: 5px;
-        background-color: white;
-    }
-    .fixed-table th, .fixed-table td {
-        border: 1px solid #dee2e6;
-        padding: 5px 2px;
-        text-align: center;
-        vertical-align: middle;
-        height: 44px; /* 최소 높이 확보로 줄바꿈 시에도 안정적 */
-    }
-    .fixed-table th { background-color: #f8f9fa; font-size: 13px; font-weight: bold; color: #333; }
-    .fixed-table td { font-size: 12.5px; color: #444; }
-
-    /* 요청하신 정밀 너비 비율 적용 (총합 100%) */
-    .col-place { width: 21%; }  /* 장소명 (보직자회의실 기준 너비 확보) */
-    .col-time { width: 14%; }   /* 시간 (00:00~00:00 최적화) */
-    .col-event { width: 42%; }  /* 행사명 (장소명의 2배 할당) */
-    .col-dept { width: 16%; }   /* 부서명 */
-    .col-status { width: 7%; }  /* 상태 (확정/대기) */
-
-    /* 내용 제어: 2줄 자동개행 및 말줄임표 처리 */
-    .cell-wrapper {
-        display: -webkit-box;
-        -webkit-line-clamp: 2; /* 2줄까지만 허용 */
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        line-height: 1.25;
-        word-break: break-all; /* 영문/한글 모두 강제 줄바꿈 */
-        max-height: 2.5em; 
-    }
-
-    /* 폰트 축소 클래스 (로컬 테스트 임계치 적용) */
-    .f-small { font-size: 11px !important; letter-spacing: -0.3px; }
-
-    .empty-building-msg { color: #999; padding: 12px 5px; font-size: 13px; border-bottom: 1px dotted #ccc; }
-    
-    div.stDownloadButton > button {
-        width: 100%; background-color: #1e3a5f !important; color: white !important;
-        border: none !important; padding: 10px !important; border-radius: 6px !important; font-weight: bold !important;
-    }
-    </style>
+    /* 2줄 제한 및 자동 폰트 축소 */
+    .cell-txt { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; word-break: break-all; font-size: 12.5px; }
+    .small-txt { font-size: 11px !important; }
+    .status-ok { color: #27ae60; font-weight: bold; }
+    .status-wait { color: #e67e22; font-weight: bold; }
+    .no-data { color: #999; padding: 10px; font-size: 13px; border-bottom: 1px solid #eee; }
+</style>
 """, unsafe_allow_html=True)
 
-KST = pytz.timezone('Asia/Seoul')
-now_today = datetime.now(KST).date()
-BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
-
-def get_shift(target_date):
-    base_date = date(2026, 3, 13)
-    diff = (target_date - base_date).days
-    return f"{['A', 'B', 'C'][diff % 3]}조"
-
+# 3. 데이터 조회 함수
 @st.cache_data(ttl=60)
-def get_data(start_date, end_date):
+def fetch_rental_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": start_date.isoformat(), "end": end_date.isoformat()}
     try:
-        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        raw = res.json().get('res', [])
-        rows = []
-        for item in raw:
+        res = requests.get(url, params=params, timeout=10)
+        data = res.json().get('res', [])
+        result = []
+        for item in data:
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            allow_day_raw = str(item.get('allowDay', ''))
-            allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    curr_wd = str(curr.isoweekday())
-                    if not allowed_days or curr_wd in allowed_days:
-                        rows.append({
-                            'full_date': curr.strftime('%Y-%m-%d'),
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
+                    result.append({
+                        'date': curr.strftime('%Y-%m-%d'),
+                        'bu': str(item.get('buNm', '')).strip(),
+                        'place': item.get('placeNm', '') or '-',
+                        'time': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
+                        'event': item.get('eventNm', '') or '-',
+                        'dept': item.get('mgDeptNm', '') or '-',
+                        'status': '확정' if item.get('status') == 'Y' else '대기'
+                    })
                 curr += timedelta(days=1)
-        return pd.DataFrame(rows)
+        return pd.DataFrame(result)
     except: return pd.DataFrame()
 
-# UI 구성
+# 4. 근무조 계산
+def get_shift(d):
+    diff = (d - date(2026, 3, 13)).days
+    return f"{['A', 'B', 'C'][diff % 3]}조"
+
+# 5. 메인 화면 구성
+st.markdown('<div class="main-title">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
+
 with st.sidebar:
     st.header("⚙️ 설정")
-    s_date = st.date_input("조회 시작일", value=now_today)
-    e_date = st.date_input("조회 종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    df_res = get_data(s_date, e_date)
+    target_date = st.date_input("조회 날짜", value=datetime.now(pytz.timezone('Asia/Seoul')).date())
+    sel_bu = st.multiselect("건물 선택", ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원", "옴니버스 파크", "대학본관", "서울성모별관"])
 
-st.markdown('<div class="main-header">📋 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
+df = fetch_rental_data(target_date, target_date)
 
-if not df_res.empty:
-    for d_str in sorted(df_res['full_date'].unique()):
-        d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        st.markdown(f'<div class="date-shift-bar">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
+# 6. HTML 렌더링 루프 (철저 검증 구역)
+if not df.empty or target_date:
+    # 근무조 정보 표시
+    st.markdown(f'<div class="date-bar">📅 {target_date} | {get_shift(target_date)}</div>', unsafe_allow_html=True)
+    
+    for bu_name in sel_bu:
+        # 건물 헤더 출력
+        filtered = df[df['bu'].str.replace(" ", "") == bu_name.replace(" ", "")]
+        count = len(filtered)
+        st.markdown(f'<div class="bu-header"><span>🏢 {bu_name}</span><span>총 {count}건</span></div>', unsafe_allow_html=True)
         
-        for bu in sel_bu:
-            b_df = df_res[(df_res['full_date'] == d_str) & (df_res['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
-            count = len(b_df)
-            
-            # 건물 헤더 출력 (데이터가 0건이어도 무조건 출력)
-            st.markdown(f'<div class="building-header"><div style="font-size:16px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {count}건</div></div>', unsafe_allow_html=True)
-            
-            if count > 0:
-                html_table = f"""
-                <table class="fixed-table">
-                    <thead>
-                        <tr>
-                            <th class="col-place">장소</th>
-                            <th class="col-time">시간</th>
-                            <th class="col-event">행사명</th>
-                            <th class="col-dept">부서</th>
-                            <th class="col-status">상태</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+        if count > 0:
+            # HTML 표 작성 (문자열 결합 방식 최적화)
+            rows_html = ""
+            for _, r in filtered.iterrows():
+                # 텍스트 길이에 따른 클래스 부여
+                p_cls = "small-txt" if len(r['place']) > 14 else ""
+                e_cls = "small-txt" if len(r['event']) > 25 else ""
+                s_cls = "status-ok" if r['status'] == '확정' else "status-wait"
+                
+                rows_html += f"""
+                <tr>
+                    <td class="w-place"><div class="cell-txt {p_cls}">{r['place']}</div></td>
+                    <td class="w-time"><div class="cell-txt">{r['time']}</div></td>
+                    <td class="w-event"><div class="cell-txt {e_cls}">{r['event']}</div></td>
+                    <td class="w-dept"><div class="cell-txt">{r['dept']}</div></td>
+                    <td class="w-status"><span class="{s_cls}">{r['status']}</span></td>
+                </tr>
                 """
-                for _, r in b_df.iterrows():
-                    # 로컬 테스트 기준: 장소/부서 14자, 행사명 25자 초과 시 폰트 축소 적용
-                    p_font = "f-small" if len(r['장소']) > 14 else ""
-                    e_font = "f-small" if len(r['행사명']) > 25 else ""
-                    d_font = "f-small" if len(r['부서']) > 14 else ""
-                    
-                    html_table += f"""
-                        <tr>
-                            <td class="{p_font}"><div class="cell-wrapper">{r['장소']}</div></td>
-                            <td>{r['시간']}</td>
-                            <td class="{e_font}"><div class="cell-wrapper">{r['행사명']}</div></td>
-                            <td class="{d_font}"><div class="cell-wrapper">{r['부서']}</div></td>
-                            <td style="color: {'#27ae60' if r['상태']=='확정' else '#e67e22'}; font-weight:bold;">{r['상태']}</td>
-                        </tr>
-                    """
-                html_table += "</tbody></table>"
-                st.markdown(html_table, unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="empty-building-msg">└ {bu} 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-else:
-    st.info("조회된 내역이 없습니다.")
+            
+            # 최종 표 결합 출력
+            full_table = f"""
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th class="w-place">장소</th><th class="w-time">시간</th>
+                        <th class="w-event">행사명</th><th class="w-dept">부서</th>
+                        <th class="w-status">상태</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+            """
+            st.markdown(full_table, unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="no-data">└ {bu_name} 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
