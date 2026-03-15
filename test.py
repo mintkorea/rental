@@ -12,45 +12,30 @@ now_today = datetime.now(KST).date()
 
 st.markdown("""
 <style>
-    /* 전체 배경색 */
     .stApp { background-color: #f8f9fa; }
-    
-    /* 날짜 헤더 */
     .date-container { background-color: #333; color: white; padding: 10px 15px; border-radius: 8px; margin-top: 25px; margin-bottom: 10px; font-weight: bold; }
-    
-    /* 건물 섹션 헤더 */
     .bu-header { font-size: 16px; font-weight: bold; color: #1e3a5f; padding: 8px 0; border-bottom: 2px solid #1e3a5f; margin: 15px 0 10px 0; }
-    
-    /* 셸 레이아웃 (카드형태 지양, 얇은 구분선 느낌) */
     .event-shell { border-bottom: 1px solid #dee2e6; padding: 10px 5px; background-color: white; }
-    
-    /* 첫 번째 줄: 장소(5) : 시간(3) : 상태(1.5) */
     .row-1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
     .col-place { flex: 5; font-size: 15px; font-weight: bold; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .col-time { flex: 3; font-size: 14px; color: #ff4b4b; font-weight: 600; text-align: center; }
     .col-status { flex: 1.5; font-size: 12px; text-align: right; }
-    
-    /* 두 번째 줄: 행사명 (인원) */
     .row-2 { font-size: 14px; color: #555; line-height: 1.4; padding-left: 2px; }
-    
-    /* 상태 배지 */
     .badge-y { color: #28a745; font-weight: bold; }
     .badge-n { color: #007bff; font-weight: bold; }
-    
-    /* 당일/기간 구분 소제목 */
     .sub-title { font-size: 13px; color: #888; margin-top: 10px; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. 근무조 로직 (이식 완료)
+# 2. 근무조 로직
 def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# 3. 데이터 수집 및 엄격한 요일 필터링
+# 3. 데이터 수집 및 필터링
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -92,8 +77,6 @@ def create_formatted_excel(df, selected_buildings):
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
-        worksheet.set_landscape()
-        
         hdr_fmt = workbook.add_format({'bold':True, 'font_size':12, 'bg_color':'#333333', 'font_color':'white', 'align':'center', 'valign':'vcenter', 'border':1})
         bu_fmt = workbook.add_format({'bold':True, 'font_size':11, 'bg_color':'#EBF1F8', 'align':'left', 'valign':'vcenter', 'border':1})
         left_fmt = workbook.add_format({'border':1, 'align':'left', 'valign':'vcenter', 'text_wrap':True, 'shrink':True})
@@ -135,6 +118,17 @@ with st.sidebar:
 
 df = get_data(s_date, e_date)
 
+# [수정] 가로 모드 표 너비 고정 설정 (column_config)
+col_config = {
+    "장소": st.column_config.TextColumn("장소", width="medium"),
+    "시간": st.column_config.TextColumn("시간", width="small"),
+    "행사명": st.column_config.TextColumn("행사명", width="large"),
+    "부서": st.column_config.TextColumn("부서", width="medium"),
+    "인원": st.column_config.TextColumn("인원", width="small"),
+    "부스": st.column_config.TextColumn("부스", width="small"),
+    "상태": st.column_config.TextColumn("상태", width="small"),
+}
+
 if not df.empty:
     with st.sidebar:
         st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
@@ -150,24 +144,23 @@ if not df.empty:
             if not b_df.empty:
                 st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
                 
-                # 당일/기간 데이터 분리
                 for is_p, title in [(False, "📌 당일 대관"), (True, "🗓️ 기간 대관")]:
                     sub_df = b_df[b_df['is_period'] == is_p]
                     if not sub_df.empty:
                         st.markdown(f'<div class="sub-title">{title}</div>', unsafe_allow_html=True)
-                        for _, row in sub_df.iterrows():
-                            s_color = "badge-y" if row['상태'] == '확정' else "badge-n"
-                            st.markdown(f"""
-                            <div class="event-shell">
-                                <div class="row-1">
-                                    <div class="col-place">📍 {row['장소']}</div>
-                                    <div class="col-time">⏰ {row['시간']}</div>
-                                    <div class="col-status"><span class="{s_color}">{row['상태']}</span></div>
-                                </div>
-                                <div class="row-2">
-                                    📄 {row['행사명']} <span style="color:#888; font-size:12px;">({row['인원']}명)</span>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                        
+                        # [가로 모드/태블릿] 표 출력 시 너비 고정 적용
+                        # 가급적 PC 화면에서 표들이 들쭉날쭉하지 않게 함
+                        st.dataframe(
+                            sub_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], 
+                            use_container_width=True, 
+                            hide_index=True,
+                            column_config=col_config
+                        )
+                        
+                        # [모바일용 숨겨진 레이아웃 - 필요 시 위 dataframe 대신 커스텀 HTML 사용 가능]
+                        # 여기서는 사용자가 dataframe 형식을 유지하길 원하므로 dataframe에 설정을 추가함
+            else:
+                st.info(f"{bu} 대관 내역이 없습니다.")
 else:
     st.info("조회된 내역이 없습니다.")
