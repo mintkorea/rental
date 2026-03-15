@@ -8,13 +8,10 @@ import io
 # 1. 페이지 설정
 st.set_page_config(page_title="성희교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. CSS - 가로/세로 모드 고정 (인덱스 숨김 포함)
+# 2. CSS 스타일 고정
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; max-width: 95% !important; }
-    div[data-testid="stTable"] thead tr th:first-child { display: none !important; }
-    div[data-testid="stTable"] tbody tr td:first-child { display: none !important; }
-    div[data-testid="stTable"] table { width: 100% !important; }
     .mobile-card { 
         background: white; border: 1px solid #e1e4e8; border-radius: 12px; 
         padding: 18px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.06);
@@ -29,7 +26,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로딩 (캐시 제거하여 실시간 조회 강제)
+# 3. 데이터 로직 (날짜 파싱 강화)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": start_date.isoformat(), "end": end_date.isoformat()}
@@ -39,59 +36,52 @@ def get_data(start_date, end_date):
         rows = []
         for item in data:
             if not item.get('startDt'): continue
-            s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
-            e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
-            curr = s_dt
-            while curr <= e_dt:
-                if start_date <= curr <= end_date:
-                    rows.append({
-                        '날짜': curr.strftime('%Y-%m-%d'),
-                        '건물명': str(item.get('buNm', '')).strip(),
-                        '장소': item.get('placeNm', '') or '-',
-                        '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                        '행사명': item.get('eventNm', '') or '-',
-                        '부서': item.get('mgDeptNm', '') or '-',
-                        '상태': '확정' if item.get('status') == 'Y' else '대기'
-                    })
-                curr += timedelta(days=1)
+            # 날짜 형식 처리 (데이터가 있을 경우에만)
+            try:
+                s_dt = datetime.strptime(item['startDt'][:10], '%Y-%m-%d').date()
+                e_dt = datetime.strptime(item['endDt'][:10], '%Y-%m-%d').date()
+                
+                curr = s_dt
+                while curr <= e_dt:
+                    if start_date <= curr <= end_date:
+                        rows.append({
+                            '날짜': curr.strftime('%Y-%m-%d'),
+                            '건물명': str(item.get('buNm', '')).strip(),
+                            '장소': item.get('placeNm', '') or '-',
+                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
+                            '행사명': item.get('eventNm', '') or '-',
+                            '부서': item.get('mgDeptNm', '') or '-',
+                            '상태': '확정' if item.get('status') == 'Y' else '대기'
+                        })
+                    curr += timedelta(days=1)
+            except: continue
         return pd.DataFrame(rows)
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# 조 계산 및 엑셀 변환
 def get_shift(d):
     diff = (d - date(2026, 3, 13)).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-def to_excel(df):
-    out = io.BytesIO()
-    with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    return out.getvalue()
-
-# 4. 사이드바
+# 4. 사이드바 및 데이터 호출
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 with st.sidebar:
     st.header("⚙️ 검색 설정")
-    view_mode = st.radio("보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"], index=0)
-    s_date = st.date_input("시작일", value=now_today)
-    e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=BUILDING_ORDER)
+    view_mode = st.radio("보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"])
+    s_date = st.date_input("조회 시작일", value=now_today)
+    e_date = st.date_input("조회 종료일", value=s_date)
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
     
-    # 데이터 강제 새로고침 버튼
-    if st.button("🔄 데이터 새로고침"):
+    if st.button("🔄 데이터 강제 새로고침"):
         st.cache_data.clear()
+        st.rerun()
 
     df_res = get_data(s_date, e_date)
-    if not df_res.empty:
-        st.download_button("📥 엑셀 다운로드", to_excel(df_res), f"대관현황_{s_date}.xlsx", use_container_width=True)
 
-# 5. 메인 화면
-st.header("📋 성희교정 대관 현황 조회")
+# 5. 메인 화면 출력
+st.markdown(f"### 📋 성희교정 대관 현황")
 
 if not df_res.empty:
     for d_str in sorted(df_res['날짜'].unique()):
@@ -99,12 +89,17 @@ if not df_res.empty:
         st.markdown(f'<div class="date-shift-bar">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
-            # 건물명 공백 제거 후 비교로 검색 누락 방지
-            b_df = df_res[(df_res['날짜'] == d_str) & (df_res['건물명'].str.replace(" ","") == bu.replace(" ",""))]
+            b_df = df_res[(df_res['날짜'] == d_str) & (df_res['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             if not b_df.empty:
                 st.markdown(f'<div class="bu-title">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+                
                 if view_mode == "가로 모드 (표)":
-                    st.table(b_df[['장소', '시간', '행사명', '부서', '상태']])
+                    # 인덱스 숨기기 설정을 적용한 데이터프레임
+                    st.dataframe(
+                        b_df[['장소', '시간', '행사명', '부서', '상태']],
+                        use_container_width=True,
+                        hide_index=True
+                    )
                 else:
                     for _, r in b_df.iterrows():
                         color = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
@@ -115,8 +110,10 @@ if not df_res.empty:
                                     <span class="card-time">🕒 {r["시간"]}</span>
                                     <span class="status-badge" style="background-color:{color};">{r["상태"]}</span>
                                 </div>
-                                <div class="card-info">📄 {r["행사명"]}<br>🏢 {r["부서"]}</div>
+                                <div class="card-info">
+                                    <b>행사:</b> {r["행사명"]}<br><b>부서:</b> {r["부서"]}
+                                </div>
                             </div>
                         ''', unsafe_allow_html=True)
 else:
-    st.warning("현재 조회된 내역이 없습니다. 시작일과 종료일을 확인하시거나 '데이터 새로고침'을 눌러주세요.")
+    st.warning("선택한 날짜에 조회된 내역이 없습니다. 시작일을 조정해 보세요.")
