@@ -16,7 +16,7 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일 (중괄호 충돌 방지를 위해 format용 더블 중괄호 사용)
+# 2. CSS 스타일 (가이드라인 준수: 장소명 1줄 고정)
 st.markdown("""
 <style>
     .event-shell {{ border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }}
@@ -27,7 +27,7 @@ st.markdown("""
     }}
     .col-time {{ flex: 2.7; font-size: 13px; color: #d9534f; font-weight: bold; text-align: center; white-space: nowrap; }}
     .col-status {{ flex: 1.5; font-size: 12px; font-weight: bold; text-align: right; }}
-    .row-sub {{ font-size: 13px; color: #666; margin-top: 6px; }}
+    .row-sub {{ font-size: 12px; color: #666; margin-top: 6px; line-height: 1.4; }}
     .main-title {{ font-size: 2.0rem; font-weight: 900; color: #1e3a5f; text-align: center; margin-bottom: 15px; }}
 </style>
 """, unsafe_allow_html=True)
@@ -57,7 +57,7 @@ def get_data(start_date, end_date):
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    curr_weekday = str(curr.isoweekday()) # 7: 일요일
+                    curr_weekday = str(curr.isoweekday())
                     if not allowed_days or curr_weekday in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
@@ -73,10 +73,9 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 사이드바 및 환경 설정
+# 4. 사이드바 구성 (가이드라인 준수: 모바일 기본 세팅)
 with st.sidebar:
     st.header("🔍 설정")
-    # 모바일 브라우저를 위해 기본 인덱스를 '모바일(세로)'로 설정
     view_mode = st.radio("📺 보기 모드", ["PC 모드", "모바일(세로)"], index=1)
     col1, col2 = st.columns(2)
     with col1: s_date = st.date_input("시작일", value=now_today)
@@ -103,12 +102,13 @@ if not df.empty:
                 if view_mode == "모바일(세로)":
                     for _, row in b_df.iterrows():
                         st_color = "#28a745" if row['상태'] == "확정" else "#d9534f"
+                        # 장소명 길이에 따른 가변 폰트 적용 (가이드라인 준수)
                         p_name = row['장소']
-                        # 장소명 길이에 따른 가변 폰트 적용
                         p_font = "14px"
-                        if len(p_name) > 10: p_font = "12.5px"
-                        if len(p_name) > 14: p_font = "11px"
+                        if len(p_name) > 10: p_font = "12px"
+                        if len(p_name) > 14: p_font = "10.5px"
 
+                        # SyntaxError 방지를 위해 .format() 사용
                         html_item = """
                         <div class="event-shell">
                             <div class="row-main">
@@ -116,7 +116,7 @@ if not df.empty:
                                 <div class="col-time">🕒 {2}</div>
                                 <div class="col-status" style="color:{3}; font-weight:bold;">{4}</div>
                             </div>
-                            <div class="row-sub">📄 {5} ({6}, {7}명)</div>
+                            <div class="row-sub">📄 {5}<br>({6}, {7}명)</div>
                         </div>
                         """.format(p_font, p_name, row['시간'], st_color, row['상태'], row['행사명'], row['부서'], row['인원'])
                         st.markdown(html_item, unsafe_allow_html=True)
