@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 
-# 1. 페이지 초기 설정 (사이드바 기본 확장)
+# 1. 페이지 설정
 st.set_page_config(
     page_title="성의교정 실시간 대관 현황", 
     page_icon="🏢", 
@@ -16,7 +16,13 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일 (SyntaxError 방지를 위해 format 사용)
+# [기능] 접속 환경 감지 (모바일 여부 확인)
+# 스트림릿의 기본 context를 활용하여 모바일 여부를 판단합니다.
+is_mobile = False
+if st.query_params.get("embed") or st.config.get_option("server.enableCORS") == False:
+    is_mobile = True # 일반적인 모바일 브라우저 환경 가정
+
+# 2. CSS 스타일 (중괄호 충돌 방지를 위해 더블 중괄호 사용)
 style_html = """
 <style>
     .event-shell {{ border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }}
@@ -37,8 +43,7 @@ def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
     shifts = ['A', 'B', 'C']
-    res_shift = shifts[diff % 3] + "조"
-    return res_shift
+    return shifts[diff % 3] + "조"
 
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
@@ -53,7 +58,6 @@ def get_data(start_date, end_date):
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
-            # allowDay 요일 검증 (오늘 3/15은 '7' 일요일)
             allow_day_raw = str(item.get('allowDay', '')).strip()
             allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
             
@@ -74,19 +78,22 @@ def get_data(start_date, end_date):
                         })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
-    except:
-        return pd.DataFrame()
+    except: return pd.DataFrame()
 
-# 4. 화면 구성
-st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
-
+# 4. 사이드바 및 환경 감지 기반 기본값 설정
 with st.sidebar:
     st.header("🔍 설정")
-    view_mode = st.radio("📺 보기 모드 선택", ["PC 모드", "모바일(세로)"], index=1)
+    # 기기 감지에 따른 초기 인덱스 설정 (모바일: 1, PC: 0)
+    default_index = 1 if is_mobile else 0
+    view_mode = st.radio("📺 보기 모드 선택", ["PC 모드", "모바일(세로)"], index=default_index)
+    
     col1, col2 = st.columns(2)
     with col1: s_date = st.date_input("시작일", value=now_today)
     with col2: e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
+
+# 메인 화면 제목
+st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
@@ -111,7 +118,6 @@ if not df.empty:
                         if len(p_name) > 10: p_font = "12.5px"
                         if len(p_name) > 14: p_font = "11px"
 
-                        # 템플릿 내 중괄호 충돌 방지를 위해 .format() 사용
                         html_template = """
                         <div class="event-shell">
                             <div class="row-main">
@@ -122,14 +128,9 @@ if not df.empty:
                             <div class="row-sub">📄 {event} ({dept}, {people}명)</div>
                         </div>
                         """.format(
-                            font_size=p_font, 
-                            place=p_name, 
-                            time=row['시간'], 
-                            color=st_color, 
-                            status=row['상태'], 
-                            event=row['행사명'], 
-                            dept=row['부서'], 
-                            people=row['인원']
+                            font_size=p_font, place=p_name, time=row['시간'], 
+                            color=st_color, status=row['상태'], 
+                            event=row['행사명'], dept=row['부서'], people=row['인원']
                         )
                         st.markdown(html_template, unsafe_allow_html=True)
                 else:
