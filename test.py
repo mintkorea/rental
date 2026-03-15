@@ -16,14 +16,13 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
-    .block-container { padding: 1.5rem 3rem !important; max-width: 1200px; margin: 0 auto; }
+    .block-container { padding: 1.5rem 2rem !important; max-width: 1400px; margin: 0 auto; }
     .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; letter-spacing: -1px; }
     span[data-baseweb="tag"] { background-color: #1E3A5F !important; }
     .date-bar { background-color: #343a40; color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 55px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .date-bar:first-of-type { margin-top: 0px; }
     .bu-header { font-size: 18px; font-weight: bold; color: #1E3A5F; margin: 20px 0 10px 0; border-left: 6px solid #1E3A5F; padding: 8px 15px; background: #f8fafd; border-radius: 0 4px 4px 0; }
     
-    /* 엑셀 버튼 세련된 스타일 */
     .stDownloadButton button { 
         background-color: #ffffff !important; border: 1px solid #1E3A5F !important; color: #1E3A5F !important; 
         font-weight: bold !important; transition: 0.3s; margin-top: 5px;
@@ -40,7 +39,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 엑셀 생성 함수 (정수 규격 준수)
+# 2. 엑셀 생성 함수 (엑셀은 기존 정수 규격 유지)
 # ==========================================
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
@@ -111,7 +110,7 @@ with col3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. 리스트 출력 (가로 표 너비 최적화)
+# 5. 리스트 출력 (가로 표 스크롤 방지 최적화)
 # ==========================================
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
@@ -135,11 +134,11 @@ while curr <= e_date:
                     hide_index=True, use_container_width=True,
                     column_config={
                         "장소": st.column_config.TextColumn("장소", width="medium"), 
-                        "시간": st.column_config.TextColumn("시간", width="medium"), # [수정] small -> medium (여유 확보)
+                        "시간": st.column_config.TextColumn("시간", width="small"), # [수정] 60% 수준으로 축소
                         "행사명": st.column_config.TextColumn("행사명", width="large"), 
                         "부서": st.column_config.TextColumn("부서", width="medium"),
-                        "인원": st.column_config.TextColumn("인원", width="small"),
-                        "상태": st.column_config.TextColumn("상태", width="small"),
+                        "인원": st.column_config.NumberColumn("인원", width="small", format="%d"), # [수정] 80% 수준 타이트하게
+                        "상태": st.column_config.TextColumn("상태", width="small"), # [수정] 80% 수준 타이트하게
                     }
                 )
             else:
