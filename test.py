@@ -16,19 +16,19 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
-    .block-container { padding: 1.5rem 2rem !important; max-width: 1400px; margin: 0 auto; }
-    .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; }
-    span[data-baseweb="tag"] { background-color: #1E3A5F !important; }
-    .date-bar { background-color: #343a40; color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 55px; margin-bottom: 15px; }
-    .bu-header { font-size: 18px; font-weight: bold; color: #1E3A5F; margin: 20px 0 10px 0; border-left: 6px solid #1E3A5F; padding: 8px 15px; background: #f8fafd; border-radius: 0 4px 4px 0; }
+    /* 본문 폭 제한: PC에서 너무 퍼지지 않게 함 */
+    .block-container { padding: 1.5rem 2rem !important; max-width: 1100px; margin: 0 auto; }
     
-    /* 테이블 중앙 정렬 강제 적용 (CSS) */
-    [data-testid="stTable"] th, [data-testid="stTable"] td { text-align: center !important; }
-    .stDownloadButton button { background-color: #ffffff !important; border: 1px solid #1E3A5F !important; color: #1E3A5F !important; font-weight: bold !important; margin-top: 5px; }
+    .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; }
+    .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 50px; margin-bottom: 10px; }
+    .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 15px 0 8px 0; border-left: 5px solid #1E3A5F; padding: 5px 12px; background: #f8fafd; }
+    
+    /* 버튼 컴팩트하게 */
+    .stDownloadButton button { border: 1px solid #1E3A5F !important; color: #1E3A5F !important; font-weight: bold !important; width: auto !important; padding: 0.25rem 2rem !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 엑셀 생성 함수 (생략 - 기존 유지)
+# (2. 엑셀 생성 및 3. 데이터 로직은 기존과 동일하므로 생략 가능하나 전체 코드를 위해 유지)
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -54,7 +54,6 @@ def create_excel_report(df, selected_bu):
                 row += 1
     return output.getvalue()
 
-# 3. 데이터 수집 로직 (기존 유지)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -78,16 +77,16 @@ st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', uns
 col1, col2, col3 = st.columns([1.5, 3, 1])
 with col1:
     s_date = st.date_input("📅 기간 설정", value=now_today)
-    e_date = st.date_input("종료일 선택", value=s_date, label_visibility="collapsed")
+    e_date = st.date_input("종료일", value=s_date, label_visibility="collapsed")
 with col2:
     sel_bu = st.multiselect("🏢 건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"])
     df = get_data(s_date, e_date)
     if not df.empty:
-        st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+        st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx")
 with col3:
     view_mode = st.radio("🖥️ 보기 모드", ["세로 카드", "가로 표"], horizontal=False)
 
-# 5. 리스트 출력 (정렬 및 너비 최적화)
+# 5. 리스트 출력 (너비 수동 조절로 '퍼짐' 방지)
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
     diff = (t_date - date(2026, 3, 13)).days
@@ -105,22 +104,23 @@ while curr <= e_date:
         
         if not b_df.empty:
             if view_mode == "가로 표":
-                # 데이터프레임 스타일러를 통한 정렬 적용
+                # width를 숫자로 지정하여 전체 표가 너무 늘어나는 것을 방지
                 st.dataframe(
                     b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'),
-                    hide_index=True, use_container_width=True,
+                    hide_index=True,
+                    use_container_width=True,
                     column_config={
-                        "장소": st.column_config.TextColumn("장소", width="medium"), 
-                        "시간": st.column_config.TextColumn("시간", width="medium"), # 고정 너비 느낌으로 변경
-                        "행사명": st.column_config.TextColumn("행사명", width="large"), 
-                        "부서": st.column_config.TextColumn("부서", width="medium"),
-                        "인원": st.column_config.TextColumn("인원", width="small"),
-                        "상태": st.column_config.TextColumn("상태", width="small"),
+                        "장소": st.column_config.TextColumn("장소", width=150), 
+                        "시간": st.column_config.TextColumn("시간", width=120), # 중앙 정렬 느낌을 위해 폭 조절
+                        "행사명": st.column_config.TextColumn("행사명", width=300), 
+                        "부서": st.column_config.TextColumn("부서", width=150),
+                        "인원": st.column_config.TextColumn("인원", width=60),
+                        "상태": st.column_config.TextColumn("상태", width=60),
                     }
                 )
             else:
                 for _, r in b_df.sort_values('시간').iterrows():
-                    st.markdown(f'<div class="mobile-card"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span></div><div class="row-2"><b>{r["행사명"]}</b><br><span style="color:#666;">{r["부서"]} | {r["인원"]}명</span></div></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:white; border:1px solid #eee; padding:10px; border-radius:8px; margin-bottom:8px;"><b>📍 {r["장소"]}</b> <span style="color:red; float:right;">{r["시간"]}</span><br><small>{r["행사명"]} ({r["부서"]})</small></div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="text-align:center; color:grey; font-size:12px;">내역 없음</div>', unsafe_allow_html=True)
     curr += timedelta(days=1)
