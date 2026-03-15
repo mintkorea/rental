@@ -37,7 +37,6 @@ def get_shift(target_date):
 
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
-    # 기간 조회가 가능하도록 시작일과 종료일 사이의 데이터를 수집
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": start_date.isoformat(), "end": end_date.isoformat()}
     try:
@@ -46,7 +45,6 @@ def get_data(start_date, end_date):
         rows = []
         for item in raw:
             if not item.get('startDt'): continue
-            # API 데이터 특성상 기간 내 반복 일정 처리
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             allow_day_raw = str(item.get('allowDay', ''))
@@ -71,65 +69,9 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 3. 엑셀 생성 (행 높이 35 보존)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
         worksheet.set_landscape()
-        hdr = workbook.add_format({'bold':True, 'font_size':12, 'bg_color':'#333333', 'font_color':'white', 'align':'center', 'valign':'vcenter', 'border':1})
-        bu_f = workbook.add_format({'bold':True, 'font_size':11, 'bg_color':'#EBF1F8', 'align':'left', 'valign':'vcenter', 'border':1})
-        l_f = workbook.add_format({'border':1, 'align':'left', 'valign':'vcenter', 'text_wrap':True, 'shrink':True})
-        c_f = workbook.add_format({'border':1, 'align':'center', 'valign':'vcenter', 'shrink':True})
-
-        curr_row = 1
-        for d_str in sorted(df['full_date'].unique()):
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.set_row(curr_row, 35)
-            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", hdr)
-            curr_row += 1
-            for bu in BUILDING_ORDER:
-                if bu in selected_buildings:
-                    b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
-                    if not b_df.empty:
-                        worksheet.set_row(curr_row, 35)
-                        worksheet.merge_range(curr_row, 0, curr_row, 6, f"  📍 {bu}", bu_f)
-                        curr_row += 1
-                        for _, r in b_df.iterrows():
-                            worksheet.set_row(curr_row, 35)
-                            worksheet.write(curr_row, 0, r['장소'], l_f); worksheet.write(curr_row, 1, r['시간'], c_f)
-                            worksheet.write(curr_row, 2, r['행사명'], l_f); worksheet.write(curr_row, 3, r['부서'], l_f)
-                            worksheet.write(curr_row, 4, r['인원'], c_f); worksheet.write(curr_row, 5, r['부스'], c_f)
-                            worksheet.write(curr_row, 6, r['상태'], c_f)
-                            curr_row += 1
-                        curr_row += 1
-        worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 12); worksheet.set_column('C:C', 35); worksheet.set_column('D:D', 18); worksheet.set_column('E:G', 7)
-    return output.getvalue()
-
-# 4. 화면 구성
-st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
-
-with st.sidebar:
-    st.header("🔍 설정")
-    view_mode = st.radio("📺 보기 모드 선택", ["PC 모드", "모바일(세로)", "모바일(가로)"], index=0)
-    # [복구] 시작일과 종료일 설정 가능
-    col1, col2 = st.columns(2)
-    with col1: s_date = st.date_input("시작일", value=now_today)
-    with col2: e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원", "옴니버스 파크"])
-
-df = get_data(s_date, e_date)
-
-if not df.empty:
-    excel_data = create_formatted_excel(df, sel_bu)
-    st.download_button(f"📥 {s_date}~{e_date} 엑셀 다운로드", data=excel_data, file_name=f"대관현황_{s_date}_{e_date}.xlsx", use_container_width=True)
-
-    for d_str in sorted(df['full_date'].unique()):
-        d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        st.markdown(f'<div style="background-color:#444; color:white; padding:10px; border-radius:5px; margin-top:20px; font-weight:bold;">'
-                    f'🗓️ {d_str} | 근무조: {get_shift(d_obj)}</div>', unsafe_allow_html=True)
-        
-        for bu in sel_bu:
-            b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
-            if not b_df.empty:
-                st.markdown(f"""<div style="display:flex; align-items:center; justify-content:space
+        hdr = workbook.add_format({'bold':True, 'font_size':12, 'bg_color':'#333333', 'font_color':'white', '
