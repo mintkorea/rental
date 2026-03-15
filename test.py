@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 모바일 뷰포트
+# 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
@@ -18,7 +18,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# 2. 데이터 수집 및 allowDay 요일 필터링 (핵심 로직)
+# [핵심] allowDay 요일 필터링 원본 로직
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -54,24 +54,20 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 3. 엑셀 생성 함수 (에러 방지를 위한 원본 포맷)
+# [에러 해결] 매개변수 일치시킨 엑셀 생성 함수
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('현황')
-        
-        # 포맷 정의
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#333333', 'font_color': 'white', 'border': 1, 'align': 'center'})
         bu_fmt = workbook.add_format({'bold': True, 'bg_color': '#EBF1F8', 'border': 1})
-        cell_fmt = workbook.add_format({'border': 1, 'text_wrap': True, 'valign': 'vcenter'})
+        cell_fmt = workbook.add_format({'border': 1, 'text_wrap': True})
         
         curr_row = 0
         for d_str in sorted(df['full_date'].unique()):
-            d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str} | 근무조: {get_shift(d_obj)}", header_fmt)
+            worksheet.merge_range(curr_row, 0, curr_row, 6, f"📅 {d_str}", header_fmt)
             curr_row += 1
-            
             for bu in BUILDING_ORDER:
                 if bu in selected_buildings:
                     b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
@@ -82,10 +78,9 @@ def create_formatted_excel(df, selected_buildings):
                             worksheet.write_row(curr_row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], '-', '-', r['상태']], cell_fmt)
                             curr_row += 1
                         curr_row += 1
-        worksheet.set_column('A:D', 20)
     return output.getvalue()
 
-# --- 화면 구성 ---
+# --- 화면 출력부 ---
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
@@ -96,9 +91,8 @@ with st.sidebar:
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    # [준수] 엑셀 버튼은 메인 상단에 위치
-    excel_data = create_formatted_excel(df, sel_bu)
-    st.download_button("📥 엑셀 다운로드", data=excel_data, file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+    # [원본] 엑셀 버튼 메인 상단 위치 및 에러 방지 호출
+    st.download_button("📥 엑셀 다운로드", data=create_formatted_excel(df, sel_bu), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
 
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
@@ -106,12 +100,13 @@ if not df.empty:
                     f'<h3>📅 {d_str} | {get_shift(d_obj)}</h3></div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
-            b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
+            bu_clean = bu.replace(" ", "")
+            b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu_clean)]
+            
             if not b_df.empty:
-                # [준수] 건물명 옆 (N건) 표시
                 st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
                 
-                # [준수] 당일/기간 대관 분리 로직
+                # 당일/기간 대관 분리
                 t_df = b_df[b_df['is_period'] == False]
                 p_df = b_df[b_df['is_period'] == True]
                 
@@ -123,7 +118,7 @@ if not df.empty:
                         else:
                             for _, r in target_df.iterrows():
                                 st.markdown(f"""
-                                <div style="border-bottom:1px solid #eee; padding:10px 0;">
+                                <div style="border-bottom:1px solid #eee; padding:8px 0;">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
                                         <div style="font-weight:bold; font-size:15px;">{r['장소']}</div>
                                         <div style="color:#e74c3c; font-weight:bold; font-size:13px;">{r['시간']}</div>
