@@ -53,12 +53,11 @@ def get_data(start_date, end_date):
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
                     curr_wd = str(curr.isoweekday())
-                    # allowDay 엄격 필터링
                     if not allowed_days or curr_wd in allowed_days:
                         bu_nm_raw = str(item.get('buNm', '')).strip()
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
-                            '건물명_raw': bu_nm_raw,
+                            '건물명': bu_nm_raw,
                             '건물명_key': bu_nm_raw.replace(" ", ""),
                             '장소': item.get('placeNm', '') or '-',
                             '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
@@ -75,43 +74,47 @@ with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
     v_mode = st.radio("모드", ["모바일", "PC"], horizontal=True)
 
 st.markdown('<div class="main-title"><span>📋</span> 성의교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
-# 데이터 로드 및 필터링
 df = get_data(s_date, e_date)
-filtered_df = pd.DataFrame()
 
-if not df.empty and sel_bu:
-    sel_bu_keys = [b.replace(" ", "") for b in sel_bu]
-    filtered_df = df[df['건물명_key'].isin(sel_bu_keys)].copy()
-
-# --- 결과 출력 로직 (수정 핵심) ---
-# 1. 필터링된 데이터가 전혀 없는 경우 (의산연 단독 선택 시 포함)
-if filtered_df.empty:
-    st.info("대관 내역이 없습니다.")
-else:
-    # 2. 데이터가 있는 경우 출력
-    excel_out = io.BytesIO()
-    with pd.ExcelWriter(excel_out, engine='xlsxwriter') as writer:
-        filtered_df[['full_date', '건물명_raw', '장소', '시간', '행사명', '부서', '상태']].to_excel(writer, index=False)
-    st.download_button("📊 조회 결과 엑셀 다운로드", data=excel_out.getvalue(), file_name=f"현황.xlsx", use_container_width=True)
-
-    for d_str in sorted(filtered_df['full_date'].unique()):
-        d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:15px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
+# --- 출력 로직 핵심 수정 ---
+# 선택한 시작일부터 종료일까지 각 날짜별로 루프
+curr_day = s_date
+while curr_day <= e_date:
+    d_str = curr_day.strftime('%Y-%m-%d')
+    st.markdown(f'<div style="background-color:#555; color:white; padding:7px; border-radius:6px; text-align:center; margin-top:25px; font-weight:bold; font-size:13px;">📅 {d_str} | {get_shift(curr_day)}</div>', unsafe_allow_html=True)
+    
+    # 해당 날짜에 선택한 건물들을 하나씩 검사
+    for bu in sel_bu:
+        bu_key = bu.replace(" ", "")
+        b_df = df[(df['full_date'] == d_str) & (df['건물명_key'] == bu_key)]
         
-        for bu in sel_bu:
-            target_key = bu.replace(" ", "")
-            b_df = filtered_df[(filtered_df['full_date'] == d_str) & (filtered_df['건물명_key'] == target_key)]
+        st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
+        
+        if not b_df.empty:
+            if v_mode == "PC":
+                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
+            else:
+                for _, r in b_df.iterrows():
+                    bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
+                    st.markdown(f"""
+                        <div class="event-card">
+                            <div class="first-line">
+                                <div class="place-name">📍 {r['장소']}</div>
+                                <div class="status-right">
+                                    <span class="time-text">🕒 {r['시간']}</span>
+                                    <span class="status-badge" style="background-color:{bg_color};">{r['상태']}</span>
+                                </div>
+                            </div>
+                            <div class="second-line">📄 {r['행사명']} | {r['부서']}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+        else:
+            # [중요] 해당 건물에 내역이 없을 때 메시지 표출
+            st.info(f"{bu} 대관 내역이 없습니다.")
             
-            if not b_df.empty:
-                st.markdown(f'<div class="building-header"><div style="font-size:15px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div><div class="count-text">총 {len(b_df)}건</div></div>', unsafe_allow_html=True)
-                if v_mode == "PC":
-                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
-                else:
-                    for _, r in b_df.iterrows():
-                        bg_color = '#27ae60' if r['상태']=='확정' else '#95a5a6'
-                        st.markdown(f'<div class="event-card"><div class="first-line"><div class="place-name">📍 {r["장소"]}</div><div class="status-right"><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge" style="background-color:{bg_color};">{r["상태"]}</span></div></div><div class="second-line">📄 {r["행사명"]} | {r["부서"]}</div></div>', unsafe_allow_html=True)
+    curr_day += timedelta(days=1)
