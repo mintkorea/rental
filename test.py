@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정
+# 1. 페이지 설정 및 줌 대응 (확대 가능 설정)
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
@@ -52,17 +52,23 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# --- 화면 출력부 (남색 디자인 적용) ---
+# --- 사이드바 설정 ---
 with st.sidebar:
     st.header("🔍 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
+    # [추가] PC/모바일 모드 선택 버튼
+    v_mode = st.radio("디스플레이 모드", ["모바일", "PC"], horizontal=True)
+
+# --- 메인 화면 출력 ---
+# [추가] 메인 타이틀
+st.title("📋 성의교정 대관 현황 조회")
 
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    # [사진 2번 디자인] 진한 남색 배경의 엑셀 다운로드 버튼
+    # 남색 버튼 디자인 유지
     st.markdown("""
         <style>
         div.stDownloadButton > button {
@@ -77,44 +83,54 @@ if not df.empty:
         </style>
     """, unsafe_allow_html=True)
     
-    st.download_button("📊 조회 결과 엑셀 파일 다운로드", data="...", file_name=f"현황.xlsx", use_container_width=True)
+    # 엑셀 다운로드 (실제 데이터 연동)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='현황')
+    st.download_button("📊 조회 결과 엑셀 파일 다운로드", data=output.getvalue(), file_name=f"현황_{s_date}.xlsx", use_container_width=True)
 
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        # [사진 2번 디자인] 진한 회색 날짜 바
         st.markdown(f"""
-            <div style="background-color:#4d4d4d; color:white; padding:10px; border-radius:8px; text-align:center; margin-bottom:20px; font-weight:bold;">
+            <div style="background-color:#4d4d4d; color:white; padding:10px; border-radius:8px; text-align:center; margin-top:30px; margin-bottom:10px; font-weight:bold;">
                 📅 {d_str} | {get_shift(d_obj)}
             </div>
         """, unsafe_allow_html=True)
         
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
+            
+            # 건물명 바 출력
+            st.markdown(f"""
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:5px 0; margin-top:15px;">
+                    <div style="font-size:18px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div>
+                    <div style="font-size:12px; color:#666;">총 {len(b_df)}건</div>
+                </div>
+            """, unsafe_allow_html=True)
+
             if not b_df.empty:
-                # [사진 2번 디자인] 건물명 바 + 총 N건 표시
-                st.markdown(f"""
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1e3a5f; padding:5px 0; margin-top:15px;">
-                        <div style="font-size:18px; font-weight:bold; color:#1e3a5f;">🏢 {bu}</div>
-                        <div style="font-size:12px; color:#666;">총 {len(b_df)}건</div>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                for _, r in b_df.iterrows():
-                    # [사진 2번 디자인] 장소(핀), 시간(시계), 행사명(문서) 아이콘 레이아웃
-                    st.markdown(f"""
-                        <div style="padding:10px 0; border-bottom:1px solid #eee;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <div style="font-weight:bold; color:#333;">📍 {r['장소']}</div>
-                                <div style="font-size:13px;">
-                                    <span style="color:#666;">🕒</span> <span style="color:#e74c3c; font-weight:bold;">{r['시간']}</span>
-                                    <span style="color:#27ae60; margin-left:10px; font-weight:bold;">{r['상태']}</span>
+                if v_mode == "PC":
+                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
+                else:
+                    for _, r in b_df.iterrows():
+                        # [장소명 대응] flex 구조로 긴 명칭이 시각적으로 밀리지 않게 처리
+                        st.markdown(f"""
+                            <div style="padding:10px 0; border-bottom:1px solid #eee;">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div style="font-weight:bold; color:#333; flex:1; padding-right:10px; font-size:15px;">📍 {r['장소']}</div>
+                                    <div style="text-align:right; min-width:100px;">
+                                        <div style="font-size:13px;"><span style="color:#666;">🕒</span> <span style="color:#e74c3c; font-weight:bold;">{r['시간']}</span></div>
+                                        <div style="background-color:#27ae60; color:white; padding:1px 4px; border-radius:3px; font-size:10px; display:inline-block; margin-top:2px;">{r['상태']}</div>
+                                    </div>
+                                </div>
+                                <div style="font-size:12px; color:#888; margin-top:4px; display:flex; align-items:flex-start;">
+                                    <span style="margin-right:5px;">📄</span>
+                                    <div>{r['행사명']} | {r['부서']}</div>
                                 </div>
                             </div>
-                            <div style="font-size:12px; color:#888; margin-top:4px; display:flex; align-items:flex-start;">
-                                <span style="margin-right:5px;">📄</span>
-                                <div>{r['행사명']} ({r['부서']})</div>
-                            </div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                        """, unsafe_allow_html=True)
+            else:
+                # [추가] 검색 결과 없는 건물 메시지
+                st.markdown('<div style="color:#bbb; font-size:12px; padding:10px; text-align:center;">조회된 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
 else:
-    st.info("내역이 없습니다.")
+    st.info("선택하신 기간에 대관 내역이 없습니다.")
