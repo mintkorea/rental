@@ -10,42 +10,42 @@ st.set_page_config(page_title="성의교정 대관 현황", page_icon="📋", la
 KST = pytz.timezone('Asia/Seoul')
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# 2. CSS 스타일 고도화
+# 2. CSS 스타일 (장소 셸 크기 최적화 및 말줄임 설정)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap');
     .stApp { background-color: #f8f9fa; font-family: 'Noto Sans KR', sans-serif; }
     
-    /* [모바일 셸 레이아웃 개선] */
-    .event-shell { border-bottom: 1px solid #eee; padding: 15px 5px; background: white; }
-    .row-1 { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    /* [모바일 셸 레이아웃] */
+    .event-shell { border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }
     
-    /* 장소 영역을 대폭 넓히고(flex 7), 시간 영역은 최소화(flex 3) */
-    .col-place { flex: 7; font-size: 16px; font-weight: 700; color: #1e3a5f; line-height: 1.3; }
-    .col-time { 
-        flex: 3; font-size: 13px; color: #d9534f; text-align: right; 
-        font-weight: bold; white-space: nowrap; margin-top: 2px;
+    /* 첫 번째 줄: 장소(좌) + 상태(우) 통합 배치 */
+    .row-1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    
+    /* 장소: 넓은 공간 할당 및 아주 긴 이름은 말줄임(...) 처리 */
+    .col-place { 
+        flex: 8.5; font-size: 15.5px; font-weight: 700; color: #1e3a5f; 
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
     }
-    
-    /* 행사명 영역 폰트 조절 */
-    .row-2 { font-size: 14.5px; color: #555; margin-top: 6px; line-height: 1.4; word-break: keep-all; }
+    /* 상태: 우측 끝에 고정 */
+    .col-status { flex: 1.5; font-size: 12.5px; font-weight: bold; text-align: right; }
 
-    /* [PC 표 모드 개선] */
-    /* 표 안의 텍스트가 잘리지 않고 자동 줄바꿈(2행 이상) 되도록 강제 설정 */
-    .stDataFrame div[data-testid="stTable"] td {
-        white-space: normal !important;
-        word-break: break-all !important;
-        font-size: 14px !important;
-        line-height: 1.2 !important;
-    }
+    /* 두 번째 줄: 시간(빨간색) */
+    .row-time { font-size: 14px; color: #d9534f; font-weight: bold; margin-top: 4px; display: flex; align-items: center; }
+    
+    /* 세 번째 줄: 행사명 및 상세 정보 */
+    .row-info { font-size: 14px; color: #666; margin-top: 5px; line-height: 1.4; word-break: keep-all; }
+
+    /* [PC 표 모드 자동 개행] */
+    .stDataFrame div[data-testid="stTable"] td { white-space: normal !important; word-break: break-all !important; font-size: 14px !important; }
     
     .main-title { font-size: 1.8rem; font-weight: 900; color: #1e3a5f; text-align: center; margin: 15px 0; }
-    .date-container { background: #333; color: white; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-weight: bold; }
-    .bu-header { font-size: 1.1rem; font-weight: 700; color: #1e3a5f; padding: 10px 0; border-bottom: 2px solid #1e3a5f; }
+    .date-container { background: #333; color: white; padding: 10px; border-radius: 8px; margin: 15px 0 10px 0; font-weight: bold; }
+    .bu-header { font-size: 1.1rem; font-weight: 700; color: #1e3a5f; padding: 8px 0; border-bottom: 2px solid #1e3a5f; margin-top: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 수집 (allowDay 필터링 포함)
+# 3. 데이터 수집 (allowDay 필터링 로직)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -92,7 +92,7 @@ with st.sidebar:
 df = get_data(s_date, e_date)
 
 if not df.empty:
-    # 엑셀 다운로드
+    # 엑셀 다운로드 (본문 상단)
     excel_data = io.BytesIO()
     with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False)
@@ -107,23 +107,21 @@ if not df.empty:
                 
                 if "모바일" in view_mode:
                     for _, row in b_df.iterrows():
+                        status_color = "#28a745" if row['상태'] == "확정" else "#d9534f"
                         st.markdown(f"""
                         <div class="event-shell">
                             <div class="row-1">
-                                <div class="col-place">📍 {row['장소']}</div>
-                                <div class="col-time">⏰ {row['시간']}</div>
+                                <div class="col-place" title="{row['장소']}">📍 {row['장소']}</div>
+                                <div class="col-status" style="color:{status_color};">{row['상태']}</div>
                             </div>
-                            <div class="row-2">📄 {row['행사명']} ({row['부서']}, {row['인원']}명) <b style="color:{'#28a745' if row['상태']=='확정' else '#d9534f'}">[{row['상태']}]</b></div>
+                            <div class="row-time">⏰ {row['시간']}</div>
+                            <div class="row-info">📄 {row['행사명']} ({row['부서']}, {row['인원']}명)</div>
                         </div>""", unsafe_allow_html=True)
                 else:
-                    # 표 형식에서 자동 개행(Column Configuration) 적용
                     st.dataframe(
                         b_df[['장소', '시간', '행사명', '부서', '인원', '상태']], 
                         use_container_width=True, hide_index=True,
-                        column_config={
-                            "행사명": st.column_config.TextColumn("행사명", width="large", help="긴 제목은 자동 줄바꿈됩니다."),
-                            "장소": st.column_config.TextColumn("장소", width="medium")
-                        }
+                        column_config={"행사명": st.column_config.TextColumn("행사명", width="large")}
                     )
 else:
     st.info("해당 날짜에 대관 내역이 없습니다.")
