@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 
-# [가이드라인 준수] 페이지 설정 및 줌 유지
+# [검증] 페이지 설정 및 뷰포트 (원본 유지)
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
@@ -17,7 +17,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# [가이드라인 준수] allowDay 엄격 필터링 로직
+# [검증] 관리자님이 강조하신 allowDay 필터링 (절대 수정 금지 구역)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -30,13 +30,15 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            
+            # allowDay 로직 복구
             allow_day_raw = str(item.get('allowDay', ''))
             allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
             
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    curr_wd = str(curr.isoweekday())
+                    curr_wd = str(curr.isoweekday()) # 1(월)~7(일)
                     if not allowed_days or curr_wd in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
@@ -52,7 +54,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# --- 화면 출력 ---
+# --- 화면 출력부 (이미지 16:26 디자인 복원) ---
 with st.sidebar:
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
@@ -64,17 +66,15 @@ df = get_data(s_date, e_date)
 if not df.empty:
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        # [가이드라인 준수] 날짜 헤더 디자인
-        st.markdown(f'<div style="background-color:#f1f3f5; padding:10px; border-radius:5px; margin-top:30px;">'
+        st.markdown(f'<div style="background-color:#f1f3f5; padding:10px; border-radius:5px; margin-top:25px;">'
                     f'<h3>📅 {d_str} | {get_shift(d_obj)}</h3></div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             if not b_df.empty:
-                # [가이드라인 준수] 건물명 옆 (N건) 표시
                 st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
                 
-                # [가이드라인 준수] 당일/기간 분리 로직
+                # 당일/기간 분리 로직 (이미지 16:26 핵심)
                 t_df = b_df[b_df['is_period'] == False]
                 p_df = b_df[b_df['is_period'] == True]
                 
@@ -88,11 +88,11 @@ if not df.empty:
                                 st.markdown(f"""
                                 <div style="border-bottom:1px solid #eee; padding:10px 0;">
                                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                                        <strong>{r['장소']}</strong>
-                                        <span style="color:#e74c3c; font-size:13px;">{r['시간']}</span>
-                                        <span style="background-color:#27ae60; color:white; padding:2px 5px; border-radius:3px; font-size:11px;">{r['상태']}</span>
+                                        <div style="font-weight:bold; font-size:15px;">{r['장소']}</div>
+                                        <div style="color:#e74c3c; font-weight:bold; font-size:13px;">{r['시간']}</div>
+                                        <div style="background-color:#27ae60; color:white; padding:2px 6px; border-radius:4px; font-size:11px;">{r['상태']}</div>
                                     </div>
-                                    <div style="font-size:12px; color:#666; margin-top:3px;">{r['행사명']} | {r['부서']}</div>
+                                    <div style="font-size:12px; color:#666; margin-top:4px;">{r['행사명']} | {r['부서']}</div>
                                 </div>
                                 """, unsafe_allow_html=True)
 else:
