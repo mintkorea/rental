@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 
-# 1. 페이지 설정
+# 1. 페이지 설정 및 사이드바 상시 확장 (가이드라인 준수)
 st.set_page_config(
     page_title="성의교정 실시간 대관 현황", 
     page_icon="🏢", 
@@ -16,13 +16,13 @@ KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-# [기능] 접속 환경 감지 (모바일 여부 확인)
-# 스트림릿의 기본 context를 활용하여 모바일 여부를 판단합니다.
-is_mobile = False
-if st.query_params.get("embed") or st.config.get_option("server.enableCORS") == False:
-    is_mobile = True # 일반적인 모바일 브라우저 환경 가정
+# [기능] 모바일 감지 (URL 파라미터 기반 보조)
+is_mobile_env = False
+if "mobile" in st.query_params:
+    is_mobile_env = True
 
-# 2. CSS 스타일 (중괄호 충돌 방지를 위해 더블 중괄호 사용)
+# 2. CSS 스타일: 장소명 1줄 고정 및 레이아웃 최적화 (가이드라인 준수)
+# SyntaxError 방지를 위해 중괄호는 {{ }}로 처리
 style_html = """
 <style>
     .event-shell {{ border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }}
@@ -34,7 +34,7 @@ style_html = """
     .col-time {{ flex: 2.7; font-size: 13px; color: #d9534f; font-weight: bold; text-align: center; white-space: nowrap; }}
     .col-status {{ flex: 1.5; font-size: 12px; font-weight: bold; text-align: right; }}
     .row-sub {{ font-size: 13px; color: #666; margin-top: 6px; }}
-    .main-title {{ font-size: 2.2rem; font-weight: 900; color: #1e3a5f; text-align: center; margin-bottom: 20px; }}
+    .main-title {{ font-size: 2.0rem; font-weight: 900; color: #1e3a5f; text-align: center; margin-bottom: 15px; }}
 </style>
 """
 st.markdown(style_html, unsafe_allow_html=True)
@@ -58,13 +58,14 @@ def get_data(start_date, end_date):
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
             
+            # [가이드라인] allowDay 요일 검증 로직 (정확히 오늘 날짜의 요일과 대조)
             allow_day_raw = str(item.get('allowDay', '')).strip()
             allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
             
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    curr_weekday = str(curr.isoweekday())
+                    curr_weekday = str(curr.isoweekday()) # 7: 일요일
                     if not allowed_days or curr_weekday in allowed_days:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
@@ -80,20 +81,19 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 사이드바 및 환경 감지 기반 기본값 설정
+# 4. 사이드바 구성: 기기별 자동 세팅 및 사이드바 상시 확장
 with st.sidebar:
     st.header("🔍 설정")
-    # 기기 감지에 따른 초기 인덱스 설정 (모바일: 1, PC: 0)
-    default_index = 1 if is_mobile else 0
-    view_mode = st.radio("📺 보기 모드 선택", ["PC 모드", "모바일(세로)"], index=default_index)
+    # [가이드라인] 모바일이면 모바일(세로)를 기본값(1)으로 설정
+    default_index = 1 if is_mobile_env else 0
+    view_mode = st.radio("📺 보기 모드", ["PC 모드", "모바일(세로)"], index=default_index)
     
     col1, col2 = st.columns(2)
     with col1: s_date = st.date_input("시작일", value=now_today)
     with col2: e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
 
-# 메인 화면 제목
-st.markdown('<div class="main-title">🏢 성의교정 실시간<br>대관 현황</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏢 성의교정 실시간 대관 현황</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
@@ -113,26 +113,24 @@ if not df.empty:
                 if view_mode == "모바일(세로)":
                     for _, row in b_df.iterrows():
                         st_color = "#28a745" if row['상태'] == "확정" else "#d9534f"
+                        # [가이드라인] 장소명 길이에 따른 가변 폰트 적용 및 1줄 고정
                         p_name = row['장소']
                         p_font = "14px"
                         if len(p_name) > 10: p_font = "12.5px"
                         if len(p_name) > 14: p_font = "11px"
 
-                        html_template = """
+                        # [가이드라인] SyntaxError 방지를 위해 .format() 사용
+                        html_item = """
                         <div class="event-shell">
                             <div class="row-main">
-                                <div class="col-place" style="font-size:{font_size};">📍 {place}</div>
-                                <div class="col-time">🕒 {time}</div>
-                                <div class="col-status" style="color:{color};">{status}</div>
+                                <div class="col-place" style="font-size:{0};">📍 {1}</div>
+                                <div class="col-time">🕒 {2}</div>
+                                <div class="col-status" style="color:{3};">{4}</div>
                             </div>
-                            <div class="row-sub">📄 {event} ({dept}, {people}명)</div>
+                            <div class="row-sub">📄 {5} ({6}, {7}명)</div>
                         </div>
-                        """.format(
-                            font_size=p_font, place=p_name, time=row['시간'], 
-                            color=st_color, status=row['상태'], 
-                            event=row['행사명'], dept=row['부서'], people=row['인원']
-                        )
-                        st.markdown(html_template, unsafe_allow_html=True)
+                        """.format(p_font, p_name, row['시간'], st_color, row['상태'], row['행사명'], row['부서'], row['인원'])
+                        st.markdown(html_item, unsafe_allow_html=True)
                 else:
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], use_container_width=True, hide_index=True)
 else:
