@@ -3,7 +3,6 @@ import requests
 import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
-import io
 
 # 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
@@ -13,7 +12,7 @@ today_now = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
-# 2. CSS (여백 최소화, 시간 우측 배치)
+# 2. CSS (여백 최소화, 시간 우측 끝 배치)
 st.markdown("""
     <style>
     .block-container { padding: 0.5rem 1rem !important; }
@@ -31,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로직 (요일 필터 정교화)
+# 3. 데이터 로직 (날짜/요일 필터링만 집중)
 def get_shift(d):
     base = date(2026, 3, 13)
     return f"{['A', 'B', 'C'][(d - base).days % 3]}조"
@@ -41,78 +40,65 @@ def get_data(start_d, end_d):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
     params = {"mode": "getReservedData", "start": start_d.isoformat(), "end": end_d.isoformat()}
     try:
-        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        raw = res.json().get('res', [])
-        rows = []
-        
-        # 16일 선택 시 16일만 나오게 하는 핵심 로직
-        current_date = start_d
-        while current_date <= end_d:
-            current_weekday_idx = (current_date.weekday() + 1) % 7
-            for item in raw:
-                # 시작~종료 기간 내에 해당 날짜가 포함되는지 확인
-                s_dt = datetime.strptime(item.get('startDt'), '%Y-%m-%d').date()
-                e_dt = datetime.strptime(item.get('endDt'), '%Y-%m-%d').date()
-                
-                if s_dt <= current_date <= e_dt:
-                    allow_days = str(item.get('allowDay', '')).split(',')
-                    if str(current_weekday_idx) in allow_days or not item.get('allowDay'):
-                        rows.append({
-                            '날짜': current_date,
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '인원': str(item.get('peopleCount', '0')),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
-            current_date += timedelta(days=1)
-        return pd.DataFrame(rows)
-    except: return pd.DataFrame()
+        res = requests.get(url, params=params, timeout=10)
+        return res.json().get('res', [])
+    except: return []
 
-# 4. UI 및 결과 없음 처리
+# 4. 화면 출력
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("🔍 설정")
     date_range = st.date_input("조회 기간", value=[today_now, today_now])
-    view_mode = st.radio("모드", ["세로 카드", "가로 표"])
     sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
 
 if len(date_range) == 2:
     s_d, e_d = date_range
-    df = get_data(s_d, e_d)
+    raw_data = get_data(s_d, e_d)
     
-    # 선택된 건물들에 대한 데이터가 하나라도 있는지 체크
-    has_any_data = False
-    if not df.empty:
-        # 건물명 정규화 후 필터링
-        filtered_df = df[df['건물명'].str.replace(" ", "").isin([b.replace(" ", "") for b in sel_bu])]
+    # 선택된 기간 내의 "개별 날짜"를 돌며 데이터가 있는지 확인
+    found_any = False
+    curr = s_d
+    while curr <= e_d:
+        # 1. 해당 날짜의 요일 인덱스 (0일~6토)
+        wd_idx = str((curr.weekday() + 1) % 7)
         
-        if not filtered_df.empty:
-            has_any_data = True
-            for d in sorted(filtered_df['날짜'].unique()):
-                st.markdown(f'<div class="date-bar">📅 {d} ({WEEKDAYS[(d.weekday()+1)%7]}요일) | {get_shift(d)}</div>', unsafe_allow_html=True)
+        # 2. 해당 날짜에 열리는 행사 필터링
+        day_events = []
+        for item in raw_data:
+            # 선택한 건물인지 확인
+            if str(item.get('buNm', '')).strip().replace(" ", "") in [b.replace(" ", "") for b in sel_bu]:
+                # 해당 날짜가 행사 기간에 포함되고, 해당 요일에 행사가 있는지 확인
+                s_dt = datetime.strptime(item.get('startDt'), '%Y-%m-%d').date()
+                e_dt = datetime.strptime(item.get('endDt'), '%Y-%m-%d').date()
+                allow_days = str(item.get('allowDay', '')).split(',')
                 
-                day_df = filtered_df[filtered_df['날짜'] == d]
-                for bu in sel_bu:
-                    b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
-                    if not b_df.empty:
-                        st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
-                        for _, r in b_df.sort_values('시간').iterrows():
-                            s_cls = "status-y" if r['상태'] == '확정' else "status-n"
-                            st.markdown(f'''
-                                <div class="mobile-card">
-                                    <div class="row-1">
-                                        <span class="loc-text">📍 {r["장소"]}</span>
-                                        <span class="time-text">🕒 {r["시간"]}</span>
-                                        <span class="status-badge {s_cls}">{r["상태"]}</span>
-                                    </div>
-                                    <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                                </div>
-                            ''', unsafe_allow_html=True)
+                if s_dt <= curr <= e_dt and (wd_idx in allow_days or not item.get('allowDay')):
+                    day_events.append(item)
 
-    # 100번 말씀하신 "결과 없을 때 안내문" 처리
-    if not has_any_data:
-        st.warning(f"⚠️ {s_d} ~ {e_d} 기간 동안 선택하신 건물({', '.join(sel_bu)})의 대관 내역이 없습니다.")
+        # 3. 필터링된 데이터가 있으면 출력
+        if day_events:
+            found_any = True
+            st.markdown(f'<div class="date-bar">📅 {curr} ({WEEKDAYS[int(wd_idx)]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
+            
+            for bu in sel_bu:
+                bu_events = [e for e in day_events if e.get('buNm','').strip().replace(" ","") == bu.replace(" ","")]
+                if bu_events:
+                    st.markdown(f'<div class="bu-header">🏢 {bu} ({len(bu_events)}건)</div>', unsafe_allow_html=True)
+                    for e in sorted(bu_events, key=lambda x: x.get('startTime', '')):
+                        s_cls = "status-y" if e.get('status') == 'Y' else "status-n"
+                        st.markdown(f'''
+                            <div class="mobile-card">
+                                <div class="row-1">
+                                    <span class="loc-text">📍 {e.get('placeNm','-')}</span>
+                                    <span class="time-text">🕒 {e.get('startTime')}~{e.get('endTime')}</span>
+                                    <span class="status-badge {s_cls}">{'확정' if e.get('status')=='Y' else '대기'}</span>
+                                </div>
+                                <div class="row-2">🏷️ <b>{e.get('eventNm','-')}</b> / {e.get('mgDeptNm','-')} ({e.get('peopleCount','0')}명)</div>
+                            </div>
+                        ''', unsafe_allow_html=True)
+        curr += timedelta(days=1)
+
+    # 100번 말씀하신 "결과 없을 때" 안내문 (가장 바깥쪽에서 체크)
+    if not found_any:
+        st.warning(f"⚠️ {s_d} ~ {e_d} 기간 내 선택하신 건물({', '.join(sel_bu)})의 대관 내역이 없습니다.")
