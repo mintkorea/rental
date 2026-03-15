@@ -6,7 +6,7 @@ import pytz
 import io
 
 # ==========================================
-# 1. 페이지 설정 및 강화된 UI CSS
+# 1. 페이지 설정 및 UI CSS
 # ==========================================
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
@@ -17,31 +17,30 @@ st.markdown("""
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
     .block-container { padding: 1.5rem 3rem !important; max-width: 1200px; margin: 0 auto; }
-    
     .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; letter-spacing: -1px; }
     span[data-baseweb="tag"] { background-color: #1E3A5F !important; }
-    
     .date-bar { background-color: #343a40; color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 55px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .date-bar:first-of-type { margin-top: 0px; }
-
     .bu-header { font-size: 18px; font-weight: bold; color: #1E3A5F; margin: 20px 0 10px 0; border-left: 6px solid #1E3A5F; padding: 8px 15px; background: #f8fafd; border-radius: 0 4px 4px 0; }
+    
+    /* 엑셀 버튼 세련된 스타일 */
+    .stDownloadButton button { 
+        background-color: #ffffff !important; border: 1px solid #1E3A5F !important; color: #1E3A5F !important; 
+        font-weight: bold !important; transition: 0.3s; margin-top: 5px;
+    }
+    .stDownloadButton button:hover { background-color: #1E3A5F !important; color: white !important; }
     
     .mobile-card { background: white; border: 1px solid #eef2f6; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
     .row-1 { display: flex; align-items: center; justify-content: space-between; width: 100%; }
     .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; }
     .time-text { font-size: 14px; font-weight: 700; color: #d9534f; }
-    
     .row-2 { font-size: 13px; color: #444; border-top: 1px solid #f1f3f5; padding-top: 10px; margin-top: 10px; line-height: 1.4; }
     .no-data { color: #868e96; font-size: 13px; padding: 20px; background: #fcfcfc; border-radius: 8px; border: 1px dashed #dee2e6; text-align: center; }
-    
-    /* 버튼 스타일 살짝 보강 */
-    .stDownloadButton button { background-color: #f8fafd !important; border: 1px solid #1E3A5F !important; color: #1E3A5F !important; transition: 0.3s; }
-    .stDownloadButton button:hover { background-color: #1E3A5F !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 엑셀 생성 함수 (규정 수치 준수)
+# 2. 엑셀 생성 함수 (정수 규격 준수)
 # ==========================================
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
@@ -93,39 +92,26 @@ def get_data(s_date, e_date):
     except: return pd.DataFrame()
 
 # ==========================================
-# 4. 상단 설정 레이아웃 (개선된 배치)
+# 4. 상단 설정 레이아웃
 # ==========================================
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-df = pd.DataFrame() # 초기화
-
-with st.container():
-    col1, col2, col3 = st.columns([1.5, 3, 1])
-    
-    with col1:
-        s_date = st.date_input("📅 기간 설정", value=now_today)
-        e_date = st.date_input("종료일 (미선택 시 당일)", value=s_date, label_visibility="collapsed")
-        
-    with col2:
-        sel_bu = st.multiselect("🏢 건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"])
-        
-        # [핵심 요청 사항] 건물 선택 박스 바로 아래에 엑셀 버튼 위치
-        df = get_data(s_date, e_date)
-        if not df.empty:
-            st.download_button(
-                label="📥 최종 규격 엑셀 저장",
-                data=create_excel_report(df, sel_bu),
-                file_name=f"대관현황_{s_date}.xlsx",
-                use_container_width=True
-            )
-        
-    with col3:
-        view_mode = st.radio("🖥️ 보기 모드", ["세로 카드", "가로 표"], horizontal=False)
+col1, col2, col3 = st.columns([1.5, 3, 1])
+with col1:
+    s_date = st.date_input("📅 기간 설정", value=now_today)
+    e_date = st.date_input("종료일 선택", value=s_date, label_visibility="collapsed")
+with col2:
+    sel_bu = st.multiselect("🏢 건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"])
+    df = get_data(s_date, e_date)
+    if not df.empty:
+        st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+with col3:
+    view_mode = st.radio("🖥️ 보기 모드", ["세로 카드", "가로 표"], horizontal=False)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ==========================================
-# 5. 결과 리스트 출력
+# 5. 리스트 출력 (가로 표 너비 최적화)
 # ==========================================
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
@@ -149,7 +135,7 @@ while curr <= e_date:
                     hide_index=True, use_container_width=True,
                     column_config={
                         "장소": st.column_config.TextColumn("장소", width="medium"), 
-                        "시간": st.column_config.TextColumn("시간", width="small"),
+                        "시간": st.column_config.TextColumn("시간", width="medium"), # [수정] small -> medium (여유 확보)
                         "행사명": st.column_config.TextColumn("행사명", width="large"), 
                         "부서": st.column_config.TextColumn("부서", width="medium"),
                         "인원": st.column_config.TextColumn("인원", width="small"),
