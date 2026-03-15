@@ -8,38 +8,30 @@ import io
 # 1. 페이지 설정
 st.set_page_config(page_title="성희교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. 통합 CSS: 가로/세로 모드 레이아웃 완벽 고정
+# 2. CSS - 가로 모드 표 정렬 및 세로 모드 카드 레이아웃 완벽 고정
 st.markdown("""
     <style>
     .block-container { padding-top: 2rem !important; max-width: 95% !important; }
     
-    /* [가로 모드] 표 스타일: No 없이 필수 5개 열 최적화 */
+    /* [가로 모드] 표 스타일: No 없이 필수 5개 열만 깔끔하게 출력 */
     div[data-testid="stTable"] table { width: 100% !important; }
     div[data-testid="stTable"] th { 
         background-color: #f0f2f6 !important; 
         text-align: center !important; 
         font-weight: bold !important; 
-        font-size: 15px;
     }
-    div[data-testid="stTable"] td { 
-        vertical-align: middle !important; 
-        padding: 12px !important; 
-        font-size: 14px;
-    }
+    div[data-testid="stTable"] td { vertical-align: middle !important; padding: 12px !important; }
 
-    /* [세로 모드] 카드 레이아웃: 장소 / 시간+상태 / 행사+부서 순 */
+    /* [세로 모드] 카드 레이아웃: 장소 / 시간+상태 / 행사명+부서 순 */
     .mobile-card { 
         background: white; border: 1px solid #e1e4e8; border-radius: 12px; 
-        padding: 18px; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(0,0,0,0.07);
+        padding: 18px; margin-bottom: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.06);
     }
-    .card-place { font-size: 18px; font-weight: bold; color: #1e3a5f; margin-bottom: 10px; }
-    .card-time-status { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .card-place { font-size: 18px; font-weight: bold; color: #1e3a5f; margin-bottom: 10px; display: block; }
+    .card-time-status { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
     .card-time { color: #e74c3c; font-weight: bold; font-size: 15px; }
-    .card-info { 
-        font-size: 14px; color: #444; border-top: 1px solid #f1f3f5; 
-        padding-top: 10px; line-height: 1.6; 
-    }
-    .status-badge { padding: 3px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; color: white; }
+    .card-info { font-size: 14px; color: #444; border-top: 1px solid #f0f0f0; padding-top: 10px; line-height: 1.5; }
+    .status-badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
 
     .main-header { font-size: 26px; font-weight: bold; color: #1e3a5f; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px; margin-bottom: 25px; }
     .date-shift-bar { background-color: #343a40; color: white; padding: 14px; border-radius: 10px; text-align: center; font-weight: bold; margin: 25px 0; font-size: 18px; }
@@ -47,7 +39,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 및 엑셀 유틸리티
+# 3. 데이터 로직 및 엑셀 유틸리티
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -91,14 +83,13 @@ def to_excel_formatted(df):
         df.to_excel(writer, index=False, sheet_name='대관현황')
         workbook = writer.book
         worksheet = writer.sheets['대관현황']
-        # 헤더 서식: 배경색, 테두리, 중앙 정렬
         header_format = workbook.add_format({'bold': True, 'bg_color': '#DDEBF7', 'border': 1, 'align': 'center'})
         for col_num, value in enumerate(df.columns.values):
             worksheet.write(0, col_num, value, header_format)
-            worksheet.set_column(col_num, col_num, 22) # 열 너비 설정
+            worksheet.set_column(col_num, col_num, 22)
     return output.getvalue()
 
-# 4. 사이드바 구성 (설정 및 엑셀 다운로드 고정)
+# 4. 사이드바 - 설정 및 엑셀 다운로드 버튼 고정
 with st.sidebar:
     st.header("⚙️ 검색 설정")
     view_mode = st.radio("보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"], index=0)
@@ -109,12 +100,7 @@ with st.sidebar:
     df_res = get_data(s_date, e_date)
     if not df_res.empty:
         st.markdown("---")
-        st.download_button(
-            label="📥 엑셀 결과 다운로드",
-            data=to_excel_formatted(df_res),
-            file_name=f"성희교정_대관현황_{s_date}.xlsx",
-            use_container_width=True
-        )
+        st.download_button("📥 엑셀 다운로드", to_excel_formatted(df_res), f"대관현황_{s_date}.xlsx", use_container_width=True)
 
 # 5. 메인 화면 출력
 st.markdown('<div class="main-header">📋 성희교정 대관 현황 조회</div>', unsafe_allow_html=True)
@@ -130,24 +116,14 @@ if not df_res.empty:
                 st.markdown(f'<div class="bu-title">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
                 
                 if view_mode == "가로 모드 (표)":
-                    # No 삭제, 요청하신 5개 열만 표시
+                    # [가로 모드] No 열 없이 원하시는 5개 컬럼만 출력
                     st.table(b_df[['장소', '시간', '행사명', '부서', '상태']])
                 else:
-                    # 세로 모드 카드 레이아웃 복구
+                    # [세로 모드] 카드 레이아웃 완벽 복구 (시간이 상태 앞으로)
                     for _, r in b_df.iterrows():
-                        bg_color = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
+                        bg = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
                         st.markdown(f'''
                             <div class="mobile-card">
                                 <div class="card-place">📍 {r["장소"]}</div>
                                 <div class="card-time-status">
-                                    <span class="card-time">🕒 {r["시간"]}</span>
-                                    <span class="status-badge" style="background-color:{bg_color};">{r["상태"]}</span>
-                                </div>
-                                <div class="card-info">
-                                    <b>행사:</b> {r["행사명"]}<br>
-                                    <b>부서:</b> {r["부서"]}
-                                </div>
-                            </div>
-                        ''', unsafe_allow_html=True)
-else:
-    st.info("조회된 대관 내역이 없습니다.")
+                                    <span class="card-
