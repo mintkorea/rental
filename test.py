@@ -8,42 +8,34 @@ import io
 # 1. 페이지 설정
 st.set_page_config(page_title="성희교정 대관 현황 조회", page_icon="📋", layout="wide")
 
-# 2. 통합 CSS (정렬 및 카드 레이아웃 보정)
+# 2. 통합 CSS (정렬, 개행, 카드 레이아웃 완벽 고정)
 st.markdown("""
     <style>
     .block-container { padding-top: 5rem !important; max-width: 95% !important; margin: 0 auto !important; }
     
-    /* 가로 모드: 표 레이아웃 */
-    .custom-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 30px; border: 1px solid #dee2e6; }
-    .custom-table th, .custom-table td { 
-        padding: 12px 8px; border: 1px solid #dee2e6; font-size: 14px; vertical-align: middle; 
+    /* [가로 모드] 표 스타일 고정 */
+    div[data-testid="stTable"] table { width: 100% !important; table-layout: auto !important; }
+    div[data-testid="stTable"] th { background-color: #f0f2f6 !important; text-align: center !important; font-weight: bold !important; }
+    div[data-testid="stTable"] td { vertical-align: middle !important; white-space: normal !important; word-break: keep-all !important; line-height: 1.5 !important; }
+    
+    /* [세로 모드] 카드 레이아웃 정밀 보정 */
+    .card-container { 
+        background: #ffffff; border: 1px solid #e1e4e8; border-radius: 8px; 
+        padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    .custom-table th { background-color: #f8f9fa; font-weight: bold; text-align: center; }
-    .col-no { width: 45px; text-align: center; }
-    .col-place { width: 18%; text-align: left; }
-    .col-time { width: 110px; text-align: center; }
-    .col-event { width: 35%; text-align: left; }
-    .col-dept { width: 18%; text-align: left; }
-    .col-status { width: 65px; text-align: center; }
-
-    /* 세로 모드: 카드 레이아웃 */
-    .mobile-card { 
-        background: white; border: 1px solid #e9ecef; border-radius: 10px; 
-        padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-    }
-    .card-place { font-size: 16px; font-weight: bold; color: #1e3a5f; margin-bottom: 8px; display: block; }
-    .card-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .card-time { color: #e74c3c; font-weight: bold; font-size: 14px; }
-    .card-info { font-size: 13px; color: #495057; line-height: 1.5; border-top: 1px solid #f1f3f5; padding-top: 8px; margin-top: 4px; }
-    .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; display: inline-block; }
+    .card-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dashed #eee; padding-bottom: 8px; }
+    .card-place { font-size: 16px; font-weight: bold; color: #1e3a5f; flex: 1; }
+    .card-time { font-size: 14px; font-weight: bold; color: #e74c3c; margin-right: 10px; }
+    .card-content { font-size: 13px; color: #555; line-height: 1.4; }
+    .status-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; color: white; white-space: nowrap; }
 
     .main-header { font-size: 24px; font-weight: bold; color: #1e3a5f; margin-bottom: 20px; border-bottom: 3px solid #1e3a5f; padding-bottom: 10px; }
     .date-shift-bar { background-color: #444; color: white; padding: 12px; border-radius: 8px; text-align: center; margin: 20px 0 10px 0; font-weight: bold; }
-    .building-header { font-size: 18px; font-weight: bold; color: #1e3a5f; margin: 25px 0 10px 0; border-left: 5px solid #1e3a5f; padding-left: 10px; }
+    .building-header { border-bottom: 2px solid #1e3a5f; padding: 5px 0; margin-top: 25px; font-weight: bold; color: #1e3a5f; font-size: 18px; }
     </style>
 """, unsafe_allow_html=True)
 
-# [데이터 로직 생략 - 이전과 동일하게 유지]
+# [데이터 로직 및 엑셀 생성]
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
@@ -81,19 +73,26 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# UI 구성
+def create_excel(df):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='대관현황')
+    return output.getvalue()
+
+# 4. 사이드바 구성
 with st.sidebar:
-    st.header("⚙️ 설정")
-    view_mode = st.radio("📱 보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"], index=1)
+    st.header("⚙️ 설정 및 도구")
+    view_mode = st.radio("📱 보기 모드", ["세로 모드 (카드)", "가로 모드 (표)"], index=0)
     s_date = st.date_input("조회 시작일", value=now_today)
     e_date = st.date_input("조회 종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
     df_result = get_data(s_date, e_date)
+    
+    st.markdown("---")
     if not df_result.empty:
-        output = io.BytesIO()
-        df_result.to_excel(output, index=False)
-        st.download_button("📥 엑셀 다운로드", output.getvalue(), f"대관현황_{s_date}.xlsx", use_container_width=True)
+        st.download_button("📥 엑셀 결과 다운로드", create_excel(df_result), f"대관현황_{s_date}.xlsx", use_container_width=True)
 
+# 5. 본문 영역
 st.markdown('<div class="main-header">📋 성희교정 대관 현황 조회</div>', unsafe_allow_html=True)
 
 if not df_result.empty:
@@ -104,26 +103,25 @@ if not df_result.empty:
         for bu in sel_bu:
             b_df = df_result[(df_result['full_date'] == d_str) & (df_result['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
             if not b_df.empty:
-                st.markdown(f'<div class="building-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="building-header">🏢 {bu} (총 {len(b_df)}건)</div>', unsafe_allow_html=True)
                 
                 if view_mode == "가로 모드 (표)":
-                    html_code = """<table class="custom-table"><thead><tr><th class="col-no">No</th><th class="col-place">장소</th><th class="col-time">시간</th><th class="col-event">행사명</th><th class="col-dept">부서</th><th class="col-status">상태</th></tr></thead><tbody>"""
-                    for idx, (_, r) in enumerate(b_df.iterrows(), 1):
-                        html_code += f"<tr><td class='col-no'>{idx}</td><td class='col-place'>{r['장소']}</td><td class='col-time'>{r['시간']}</td><td class='col-event'>{r['행사명']}</td><td class='col-dept'>{r['부서']}</td><td class='col-status'>{r['상태']}</td></tr>"
-                    html_code += "</tbody></table>"
-                    st.write(html_code, unsafe_allow_html=True) # st.write(..., unsafe_allow_html=True) 사용으로 에러 방지
-                
-                else: # 세로 모드 (카드)
+                    # 불필요한 번호 셸 제거된 순수 데이터 표
+                    st.table(b_df[['장소', '시간', '행사명', '부서', '상태']])
+                else:
                     for _, r in b_df.iterrows():
                         bg = '#27ae60' if r['상태'] == '확정' else '#95a5a6'
                         st.markdown(f'''
-                            <div class="mobile-card">
-                                <div class="card-place">📍 {r["장소"]}</div>
-                                <div class="card-row">
-                                    <span class="card-time">🕒 {r["시간"]}</span>
-                                    <span class="status-badge" style="background-color:{bg};">{r["상태"]}</span>
+                            <div class="card-container">
+                                <div class="card-header-row">
+                                    <div class="card-place">📍 {r["장소"]}</div>
+                                    <div class="card-time">🕒 {r["시간"]}</div>
+                                    <div class="status-badge" style="background-color:{bg};">{r["상태"]}</div>
                                 </div>
-                                <div class="card-info">📄 {r["행사명"]}<br>🏢 {r["부서"]}</div>
+                                <div class="card-content">
+                                    <b>행사명:</b> {r["행사명"]}<br>
+                                    <b>부서:</b> {r["부서"]}
+                                </div>
                             </div>
                         ''', unsafe_allow_html=True)
 else:
