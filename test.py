@@ -17,7 +17,7 @@ st.markdown("""
     
     .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     
-    /* [여백] 날짜 바 상단 마진 55px - 시각적 답답함 해소 */
+    /* [여백] 날짜 바 상단 마진 55px */
     .date-bar { 
         background-color: #343a40; color: white; padding: 12px; border-radius: 6px; 
         text-align: center; font-weight: bold; margin-top: 55px; margin-bottom: 15px; font-size: 15px; 
@@ -26,7 +26,7 @@ st.markdown("""
 
     .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 15px 0 10px 0; border-left: 5px solid #1E3A5F; padding: 6px 12px; background: #f1f4f9; }
     
-    /* [카드] 시간 우측 끝 강제 고정 */
+    /* [카드 모드] 시간 우측 끝 강제 고정 */
     .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
     .row-1 { display: flex; align-items: center; white-space: nowrap; width: 100%; }
     .loc-text { font-size: 13px; font-weight: 800; color: #1E3A5F; flex: 1; overflow: hidden; text-overflow: ellipsis; }
@@ -38,7 +38,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 검색 소스 복구 (안정적인 데이터 수집 로직)
+# 2. 검색 소스 (안정화 로직)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -50,9 +50,7 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            # 반복 대관(allowDay) 처리 포함
             allowed = [d.strip() for d in str(item.get('allowDay', '')).split(",") if d.strip().isdigit()]
-            
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
@@ -72,7 +70,7 @@ def get_data(start_date, end_date):
     except:
         return pd.DataFrame()
 
-# 3. 화면 구성
+# 3. 화면 구성 (가로 모드 버튼 포함)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 with st.expander("🔍 조회 설정", expanded=True):
@@ -86,7 +84,7 @@ with st.expander("🔍 조회 설정", expanded=True):
 
 df = get_data(s_date, e_date)
 
-# 4. 결과 출력
+# 4. 결과 출력 (가로 모드/세로 모드 분기 로직 복구)
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
     diff = (t_date - date(2026, 3, 13)).days
@@ -101,18 +99,24 @@ while curr <= e_date:
     for bu in sel_bu:
         b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")] if not day_df.empty else pd.DataFrame()
         st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+        
         if not b_df.empty:
-            for _, r in b_df.sort_values('시간').iterrows():
-                st.markdown(f'''
-                    <div class="mobile-card">
-                        <div class="row-1">
-                            <span class="loc-text">📍 {r["장소"]}</span>
-                            <span class="time-text">🕒 {r["시간"]}</span>
-                            <span class="status-badge">확정</span>
+            if view_mode == "가로 표":
+                # [복구] 가로 모드 표 출력
+                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'), hide_index=True, use_container_width=True)
+            else:
+                # [유지] 세로 카드 모드 출력
+                for _, r in b_df.sort_values('시간').iterrows():
+                    st.markdown(f'''
+                        <div class="mobile-card">
+                            <div class="row-1">
+                                <span class="loc-text">📍 {r["장소"]}</span>
+                                <span class="time-text">🕒 {r["시간"]}</span>
+                                <span class="status-badge">확정</span>
+                            </div>
+                            <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
                         </div>
-                        <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                    </div>
-                ''', unsafe_allow_html=True)
+                    ''', unsafe_allow_html=True)
         else:
             st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     curr += timedelta(days=1)
