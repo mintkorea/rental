@@ -4,50 +4,61 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 import io
-from streamlit_javascript import st_javascript  # 화면 너비 감지용
 
-# 1. 초기 설정 및 전역 변수
-st.set_page_config(page_title="성의교정 대관 현황", page_icon="📋", layout="wide")
-KST = pytz.timezone('Asia/Seoul')
+# 1. 전역 설정 (에러 방지를 위해 변수를 최상단에 배치)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
+KST = pytz.timezone('Asia/Seoul')
 
-# 2. 고도화된 스타일 (타이틀 폰트 및 중복 방지)
+st.set_page_config(page_title="성의교정 대관 현황", page_icon="📋", layout="wide")
+
+# 2. 고도화된 스타일 (중복 노출 방지 핵심 로직 포함)
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;800&display=swap');
     
     html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
     .stApp { background-color: #f8f9fa; }
 
-    /* 메인 타이틀: 가독성 높은 폰트로 수정 */
+    /* 메인 타이틀 수정 */
     .main-title { 
-        font-size: 1.6rem; font-weight: 800; color: #1e3a5f; 
-        text-align: center; margin: 20px 0; letter-spacing: -0.5px;
-        line-height: 1.3;
+        font-size: 1.7rem; font-weight: 800; color: #1e3a5f; 
+        text-align: center; margin: 25px 0; letter-spacing: -0.7px; line-height: 1.3;
     }
     
+    /* [중복 노출 차단 전용 미디어 쿼리] */
+    /* 가로 모드일 때는 모바일 뷰를 아예 삭제 */
+    @media (min-width: 768px) {
+        .mobile-only { display: none !important; }
+        .desktop-only { display: block !important; }
+    }
+    /* 세로 모드일 때는 데스크톱 표를 아예 삭제 */
+    @media (max-width: 767px) {
+        .desktop-only { display: none !important; }
+        .mobile-only { display: block !important; }
+    }
+
     /* 날짜/근무조 헤더 */
-    .date-container { background: #333; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-weight: bold; }
+    .date-container { background: #333; color: white; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-weight: bold; font-size: 1.1rem; }
     
     /* 건물 헤더 */
     .bu-header { 
-        font-size: 1.15rem; font-weight: 700; color: #1e3a5f; 
-        padding: 8px 0; border-bottom: 2px solid #1e3a5f; 
-        display: flex; justify-content: space-between; align-items: center;
+        font-size: 1.2rem; font-weight: 700; color: #1e3a5f; 
+        padding: 10px 0; border-bottom: 2px solid #1e3a5f; 
+        display: flex; justify-content: space-between; align-items: center; margin-top: 15px;
     }
-    .event-count { background: #eef2f6; color: #1e3a5f; padding: 2px 10px; border-radius: 15px; font-size: 0.85rem; }
+    .badge-count { background: #eef2f6; color: #1e3a5f; padding: 3px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: 500; }
 
-    /* 모바일 셸 레이아웃 */
-    .event-shell { border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }
-    .row-1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-    .col-place { flex: 5; font-size: 15px; font-weight: 700; color: #333; }
+    /* 모바일 전용 셸 스타일 */
+    .event-shell { border-bottom: 1px solid #eee; padding: 15px 5px; background: white; }
+    .row-1 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .col-place { flex: 5; font-size: 16px; font-weight: 700; color: #222; }
     .col-time { flex: 3.5; font-size: 14px; color: #d9534f; font-weight: 600; text-align: center; }
-    .col-status { flex: 1.5; font-size: 12px; text-align: right; color: #28a745; font-weight: bold; }
-    .row-2 { font-size: 14px; color: #666; }
+    .col-status { flex: 1.5; font-size: 13px; text-align: right; color: #28a745; font-weight: bold; }
+    .row-2 { font-size: 15px; color: #555; line-height: 1.4; }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. 데이터 로직 (생략 없는 핵심 함수)
+# 3. 데이터 로직 함수
 def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
@@ -85,12 +96,10 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 화면 너비 감지 (JS 활용)
-width = st_javascript("window.innerWidth")
-
-# 5. 메인 타이틀 및 조회 설정
+# 4. 상단 메인 타이틀 및 본문 엑셀 버튼
 st.markdown('<div class="main-title">🏢 성의교정<br>실시간 대관 현황</div>', unsafe_allow_html=True)
 
+# 5. 사이드바 설정
 with st.sidebar:
     st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=datetime.now(KST).date())
@@ -99,12 +108,11 @@ with st.sidebar:
 
 df = get_data(s_date, e_date)
 
-# 6. 본문 및 엑셀 다운로드 버튼 배치
+# 6. 본문 출력
 if not df.empty:
-    # 엑셀 다운로드 버튼을 본문 상단에 배치
-    # ( create_formatted_excel 함수는 기존 로직 그대로 사용함을 전제 )
-    # st.download_button(...) 배치 가능
-
+    # 엑셀 다운로드 버튼 (본문 상단에 배치하여 시인성 확보)
+    # create_excel_file() 함수가 정의되어 있다면 여기에 st.download_button 추가
+    
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
         st.markdown(f'<div class="date-container">📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
@@ -112,31 +120,40 @@ if not df.empty:
         for bu in sel_bu:
             b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
             if not b_df.empty:
-                st.markdown(f'<div class="bu-header"><span>🏢 {bu}</span><span class="event-count">총 {len(b_df)}건</span></div>', unsafe_allow_html=True)
+                # 건물 헤더 + 행사 건수
+                st.markdown(f"""
+                <div class="bu-header">
+                    <span>🏢 {bu}</span>
+                    <span class="badge-count">총 {len(b_df)}건</span>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # [중복 노출 방지 핵심] 너비에 따라 하나의 모드만 실행
-                if width is not None and width < 768:
-                    # --- 세로 모드 전용 ---
-                    for _, row in b_df.iterrows():
-                        st.markdown(f"""
-                        <div class="event-shell">
-                            <div class="row-1">
-                                <div class="col-place">📍 {row['장소']}</div>
-                                <div class="col-time">⏰ {row['시간']}</div>
-                                <div class="col-status">{row['상태']}</div>
-                            </div>
-                            <div class="row-2">📄 {row['행사명']} ({row['인원']}명)</div>
-                        </div>""", unsafe_allow_html=True)
-                else:
-                    # --- 가로 모드 전용 ---
-                    st.dataframe(
-                        b_df[['장소', '시간', '행사명', '부서', '인원', '상태']], 
-                        use_container_width=True, hide_index=True,
-                        column_config={
-                            "장소": st.column_config.TextColumn(width="medium"),
-                            "시간": st.column_config.TextColumn(width="small"),
-                            "행사명": st.column_config.TextColumn(width="large")
-                        }
-                    )
+                # --- [모바일 전용 뷰: 세로] ---
+                mobile_html = '<div class="mobile-only">'
+                for _, row in b_df.iterrows():
+                    mobile_html += f"""
+                    <div class="event-shell">
+                        <div class="row-1">
+                            <div class="col-place">📍 {row['장소']}</div>
+                            <div class="col-time">⏰ {row['시간']}</div>
+                            <div class="col-status">{row['상태']}</div>
+                        </div>
+                        <div class="row-2">📄 {row['행사명']} ({row['인원']}명)</div>
+                    </div>"""
+                mobile_html += '</div>'
+                st.markdown(mobile_html, unsafe_allow_html=True)
+
+                # --- [데스크톱 전용 뷰: 가로] ---
+                st.markdown('<div class="desktop-only">', unsafe_allow_html=True)
+                st.dataframe(
+                    b_df[['장소', '시간', '행사명', '부서', '인원', '상태']], 
+                    use_container_width=True, hide_index=True,
+                    column_config={
+                        "장소": st.column_config.TextColumn(width="medium"),
+                        "시간": st.column_config.TextColumn(width="small"),
+                        "행사명": st.column_config.TextColumn(width="large")
+                    }
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
 else:
     st.info("내역이 없습니다.")
