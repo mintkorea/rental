@@ -18,6 +18,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
+# 3. 데이터 수집 및 allowDay 엄격 필터링 (가이드라인 준수)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -30,26 +31,34 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
+            
+            # allowDay 필터링 로직
+            allow_day_raw = str(item.get('allowDay', ''))
+            allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
+            
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    rows.append({
-                        'full_date': curr.strftime('%Y-%m-%d'),
-                        '건물명': str(item.get('buNm', '')).strip(),
-                        '장소': item.get('placeNm', '') or '-',
-                        '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                        '행사명': item.get('eventNm', '') or '-',
-                        '부서': item.get('mgDeptNm', '') or '-',
-                        '인원': str(item.get('peopleCount', '0')),
-                        '부스': str(item.get('boothCount', '0')),
-                        '상태': '확정' if item.get('status') == 'Y' else '대기',
-                        'is_period': s_dt != e_dt
-                    })
+                    curr_wd = str(curr.isoweekday()) # 1:월 ~ 7:일
+                    # allowed_days가 비어있지 않은 경우에만 요일 체크
+                    if not allowed_days or curr_wd in allowed_days:
+                        rows.append({
+                            'full_date': curr.strftime('%Y-%m-%d'),
+                            '건물명': str(item.get('buNm', '')).strip(),
+                            '장소': item.get('placeNm', '') or '-',
+                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
+                            '행사명': item.get('eventNm', '') or '-',
+                            '부서': item.get('mgDeptNm', '') or '-',
+                            '인원': str(item.get('peopleCount', '0')),
+                            '부스': str(item.get('boothCount', '0')),
+                            '상태': '확정' if item.get('status') == 'Y' else '대기',
+                            'is_period': s_dt != e_dt
+                        })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# --- 사이드바 설정 ---
+# --- 화면 구성 ---
 with st.sidebar:
     st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
@@ -72,7 +81,7 @@ if not df.empty:
             if not b_df.empty:
                 st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
                 
-                # 원본 핵심: 당일과 기간 대관을 분리하여 출력
+                # 당일/기간 대관 분리
                 t_df = b_df[b_df['is_period'] == False]
                 p_df = b_df[b_df['is_period'] == True]
                 
@@ -93,7 +102,5 @@ if not df.empty:
                                     <div style="font-size:12px; color:#666; margin-top:4px;">{r['행사명']} | {r['부서']}</div>
                                 </div>
                                 """, unsafe_allow_html=True)
-            else:
-                pass # 내역 없는 건물은 표시 안함
 else:
     st.info("조회된 내역이 없습니다.")
