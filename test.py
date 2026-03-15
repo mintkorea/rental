@@ -133,3 +133,4 @@ if not df_res.empty:
                         ''', unsafe_allow_html=True)
 else:
     st.info("해당 조건의 대관 내역이 없습니다.")
+
