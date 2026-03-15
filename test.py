@@ -178,3 +178,4 @@ if not df_result.empty:
                 st.markdown(f'<div style="color:#999; padding:10px; font-size:14px;">{bu} 대관 내역 없음</div>', unsafe_allow_html=True)
 else:
     st.info("조회된 대관 내역이 없습니다. 사이드바의 날짜를 확인해 주세요.")
+
