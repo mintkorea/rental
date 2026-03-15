@@ -23,9 +23,9 @@ st.markdown("""
     .event-shell { border-bottom: 1px solid #eee; padding: 12px 5px; background: white; }
     .row-main { display: flex; align-items: center; justify-content: space-between; gap: 5px; }
     
-    /* [지적사항 반영] 장소명 1줄 고정 및 말줄임 처리 */
+    /* [지적사항] 장소명 1줄 고정 및 말줄임 처리 */
     .col-place { 
-        flex: 5.5; 
+        flex: 5.8; 
         font-weight: 700; 
         color: #1e3a5f; 
         white-space: nowrap; 
@@ -34,7 +34,7 @@ st.markdown("""
         display: block;
     }
     
-    .col-time { flex: 3; font-size: 13px; color: #d9534f; font-weight: bold; text-align: center; white-space: nowrap; }
+    .col-time { flex: 2.7; font-size: 13px; color: #d9534f; font-weight: bold; text-align: center; white-space: nowrap; }
     .col-status { flex: 1.5; font-size: 12px; font-weight: bold; text-align: right; }
     .row-sub { font-size: 13px; color: #666; margin-top: 6px; }
     .main-title { font-size: 2.2rem; font-weight: 900; color: #1e3a5f; text-align: center; margin-bottom: 20px; }
@@ -59,23 +59,20 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            allow_day_raw = str(item.get('allowDay', ''))
-            allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
             
             curr = s_dt
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
-                    if not allowed_days or str(curr.isoweekday()) in allowed_days:
-                        rows.append({
-                            'full_date': curr.strftime('%Y-%m-%d'),
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
-                            '시간': "{0}~{1}".format(item.get('startTime', ''), item.get('endTime', '')),
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '인원': str(item.get('peopleCount', '0')),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
-                        })
+                    rows.append({
+                        'full_date': curr.strftime('%Y-%m-%d'),
+                        '건물명': str(item.get('buNm', '')).strip(),
+                        '장소': item.get('placeNm', '') or '-',
+                        '시간': "{0}~{1}".format(item.get('startTime', ''), item.get('endTime', '')),
+                        '행사명': item.get('eventNm', '') or '-',
+                        '부서': item.get('mgDeptNm', '') or '-',
+                        '인원': str(item.get('peopleCount', '0')),
+                        '상태': '확정' if item.get('status') == 'Y' else '대기'
+                    })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
@@ -89,7 +86,7 @@ with st.sidebar:
     col1, col2 = st.columns(2)
     with col1: s_date = st.date_input("시작일", value=now_today)
     with col2: e_date = st.date_input("종료일", value=s_date)
-    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["옴니버스 파크"])
+    sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=["옴니버스 파크", "성의회관"])
 
 df = get_data(s_date, e_date)
 
@@ -110,7 +107,7 @@ if not df.empty:
                     for _, row in b_df.iterrows():
                         st_color = "#28a745" if row['상태'] == "확정" else "#d9534f"
                         
-                        # [지적사항 반영] 글자 수에 따른 폰트 크기 동적 조절 (14px ~ 11px)
+                        # [지적사항] 폰트 크기 동적 조절 (글자 수에 따라 14px~11px)
                         p_name = row['장소']
                         p_font = "14px"
                         if len(p_name) > 10: p_font = "12.5px"
