@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 import pytz
 
-# 1. 페이지 설정 및 강력한 우측 정렬 CSS
+# 1. 페이지 설정 및 CSS (날짜 바 상단 마진 대폭 강화)
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -17,14 +17,33 @@ st.markdown("""
     
     .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     
-    /* 날짜 바 간격 유지 */
-    .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 35px; margin-bottom: 12px; font-size: 15px; }
+    /* [핵심 수정] 날짜 바 상단 여백을 50px로 늘려 전날 데이터와 확실히 분리 */
+    .date-bar { 
+        background-color: #343a40; 
+        color: white; 
+        padding: 12px; 
+        border-radius: 6px; 
+        text-align: center; 
+        font-weight: bold; 
+        margin-top: 50px; /* 기존보다 훨씬 넓게 설정 */
+        margin-bottom: 15px; 
+        font-size: 15px; 
+    }
+    /* 첫 번째 날짜 바는 상단 여백 제거 */
     .date-bar:first-of-type { margin-top: 0px; }
 
-    .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 12px 0 6px 0; border-left: 5px solid #1E3A5F; padding-left: 10px; background: #f1f4f9; padding: 5px 10px; }
+    .bu-header { 
+        font-size: 17px; 
+        font-weight: bold; 
+        color: #1E3A5F; 
+        margin: 15px 0 10px 0; 
+        border-left: 5px solid #1E3A5F; 
+        padding: 6px 12px; 
+        background: #f1f4f9; 
+    }
     
-    /* [카드 모드] 폰트 축소 및 시간 우측 끝 강제 밀기 */
-    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    /* 카드 디자인: 폰트 축소 및 시간 우측 강제 정렬 */
+    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
     
     .row-1 { 
         display: flex; 
@@ -33,27 +52,26 @@ st.markdown("""
         width: 100%;
     }
     
-    .loc-text { font-size: 13px; font-weight: 800; color: #1E3A5F; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .loc-text { font-size: 13.5px; font-weight: 800; color: #1E3A5F; flex: 1; overflow: hidden; text-overflow: ellipsis; }
     
-    /* [핵심] 시간을 오른쪽 끝에 붙이는 스타일 */
     .time-text { 
-        font-size: 12px; 
+        font-size: 12.5px; 
         font-weight: 700; 
         color: #e74c3c; 
-        margin-left: auto; /* 왼쪽 마진을 최대로 주어 오른쪽으로 밀어냄 */
-        margin-right: 8px; /* 배지와의 간격 */
+        margin-left: auto; /* 우측 끝으로 밀기 */
+        margin-right: 8px; 
         flex-shrink: 0;
     }
     
     .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; color: white; font-weight: bold; background-color: #2ecc71; flex-shrink: 0; }
     
-    .row-2 { font-size: 11px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 5px; margin-top: 5px; }
+    .row-2 { font-size: 11.5px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 6px; }
     
     .no-data { color: #7f8c8d; font-size: 12px; padding: 12px; background: #f8f9fa; border-radius: 6px; border: 1px dashed #ced4da; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 고정 설정 및 데이터 로직
+# 2. 데이터 및 로직 (기존과 동일)
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 
@@ -83,25 +101,27 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 3. 화면 구성
+# 3. 레이아웃
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-with st.expander("🔍 설정 (날짜/건물)", expanded=True):
+with st.expander("🔍 조회 설정", expanded=True):
     c1, c2 = st.columns(2)
     with c1:
         s_date = st.date_input("시작일", value=now_today)
         e_date = st.date_input("종료일", value=s_date)
     with c2:
-        sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+        sel_bu = st.multiselect("건물", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
         view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
 
 df = get_data(s_date, e_date)
 
-# 4. 출력
+# 4. 출력부
 curr = s_date
 while curr <= e_date:
     d_str = curr.strftime('%Y-%m-%d')
     day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
+    
+    # 여백이 강화된 날짜 바
     st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
     
     for bu in sel_bu:
@@ -118,7 +138,7 @@ while curr <= e_date:
                             <div class="row-1">
                                 <span class="loc-text">📍 {r["장소"]}</span>
                                 <span class="time-text">🕒 {r["시간"]}</span>
-                                <span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span>
+                                <span class="status-badge">확정</span>
                             </div>
                             <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
                         </div>
