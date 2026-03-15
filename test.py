@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 CSS
+# 1. 페이지 설정 및 일관된 스타일 (폰트 대형화)
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -14,19 +14,22 @@ st.markdown("""
     <style>
     .block-container { padding: 0.5rem 1rem !important; }
     header {visibility: hidden;}
+    /* 타이틀 28px, 날짜바 18px, 건물헤더 20px 고정 */
     .main-title { font-size: 28px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-bottom: 12px; font-size: 18px; }
     .bu-header { font-size: 20px; font-weight: bold; color: #1E3A5F; margin: 15px 0 8px 0; border-left: 6px solid #1E3A5F; padding-left: 12px; background: #f1f4f9; padding-top: 5px; padding-bottom: 5px; }
-    .no-data { color: #7f8c8d; font-size: 14px; padding: 12px; background: #f8f9fa; border-radius: 4px; border: 1px dashed #ced4da; margin-bottom: 10px; }
     
-    /* 카드 스타일 (시간 우측 배치) */
-    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 15px; margin-bottom: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    /* 일관된 안내문 폼 */
+    .no-data { color: #7f8c8d; font-size: 15px; padding: 15px; background: #f8f9fa; border-radius: 6px; border: 1px dashed #ced4da; margin-bottom: 10px; text-align: center; }
+    
+    /* 카드 레이아웃 고정 (시간 우측 배치) */
+    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 12px 15px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
     .row-1 { display: flex; justify-content: space-between; align-items: center; }
-    .loc-text { font-size: 15px; font-weight: 800; color: #1E3A5F; }
-    .time-text { font-size: 14px; font-weight: 700; color: #e74c3c; margin-left: auto; margin-right: 15px; }
-    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; }
+    .loc-text { font-size: 16px; font-weight: 800; color: #1E3A5F; }
+    .time-text { font-size: 15px; font-weight: 700; color: #e74c3c; margin-left: auto; margin-right: 15px; }
+    .status-badge { padding: 3px 10px; border-radius: 4px; font-size: 12px; color: white; font-weight: bold; }
     .status-y { background-color: #2ecc71; } .status-n { background-color: #95a5a6; }
-    .row-2 { font-size: 13px; color: #333; border-top: 1px solid #f8f9fa; margin-top: 6px; padding-top: 6px; }
+    .row-2 { font-size: 14px; color: #333; border-top: 1px solid #f8f9fa; margin-top: 8px; padding-top: 8px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -38,16 +41,14 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# 2. 엑셀 생성 함수
+# 2. 엑셀 출력 (일관성 있는 포맷)
 def create_formatted_excel(df, selected_buildings):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('대관현황')
+        workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
         hdr_fmt = workbook.add_format({'bold':True,'bg_color':'#333333','font_color':'white','align':'center','border':1})
         bu_fmt = workbook.add_format({'bold':True,'bg_color':'#EBF1F8','border':1})
         cell_fmt = workbook.add_format({'border':1,'align':'center','valign':'vcenter','text_wrap':True})
-        
         curr_row = 0
         for d_str in sorted(df['full_date'].unique()):
             d_df = df[df['full_date'] == d_str]
@@ -55,16 +56,16 @@ def create_formatted_excel(df, selected_buildings):
             curr_row += 1
             for bu in selected_buildings:
                 b_df = d_df[d_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
+                worksheet.merge_range(curr_row, 0, curr_row, 5, f"🏢 {bu} ({len(b_df)}건)", bu_fmt)
+                curr_row += 1
                 if not b_df.empty:
-                    worksheet.merge_range(curr_row, 0, curr_row, 5, f"🏢 {bu}", bu_fmt)
-                    curr_row += 1
                     for _, r in b_df.iterrows():
                         worksheet.write_row(curr_row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], cell_fmt)
                         curr_row += 1
-            curr_row += 1
+                curr_row += 1
     return output.getvalue()
 
-# 3. 데이터 로직 (엄격 필터링)
+# 3. 검색 로직 (사용자 제시 로직 유지)
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -85,17 +86,15 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# 4. 사이드바 설정
+# 4. 화면 구성
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
+
 with st.sidebar:
     st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
-    # 모드 전환 버튼 복구
     view_mode = st.radio("보기 모드", ["세로 카드", "가로 표"])
     sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
-
-# 5. 메인 출력
-st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 df = get_data(s_date, e_date)
 
@@ -111,6 +110,7 @@ if not df.empty:
         
         for bu in sel_bu:
             b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")] if not day_df.empty else pd.DataFrame()
+            # [일관성 1] 데이터 유무와 상관없이 무조건 건물 헤더 출력
             st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
             
             if not b_df.empty:
@@ -119,18 +119,10 @@ if not df.empty:
                 else:
                     for _, r in b_df.sort_values('시간').iterrows():
                         s_cls = "status-y" if r['상태'] == '확정' else "status-n"
-                        st.markdown(f'''
-                            <div class="mobile-card">
-                                <div class="row-1">
-                                    <span class="loc-text">📍 {r["장소"]}</span>
-                                    <span class="time-text">🕒 {r["시간"]}</span>
-                                    <span class="status-badge {s_cls}">{r["상태"]}</span>
-                                </div>
-                                <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                            </div>
-                        ''', unsafe_allow_html=True)
+                        st.markdown(f'''<div class="mobile-card"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge {s_cls}">{r["상태"]}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div></div>''', unsafe_allow_html=True)
             else:
+                # [일관성 2] 데이터가 없을 때도 건물명 아래에 명확히 안내문 표출
                 st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
         curr += timedelta(days=1)
 else:
-    st.warning("조회된 내역이 없습니다.")
+    st.warning("⚠️ 선택하신 기간에 조회된 데이터가 없습니다.")
