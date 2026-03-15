@@ -33,32 +33,4 @@ st.markdown("""
 def get_shift(target_date):
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
-    return f"{['A', 'B', 'C'][diff % 3]}조"
-
-@st.cache_data(ttl=60)
-def get_data(start_date, end_date):
-    url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
-    params = {"mode": "getReservedData", "start": start_date.isoformat(), "end": end_date.isoformat()}
-    try:
-        res = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        raw = res.json().get('res', [])
-        rows = []
-        for item in raw:
-            if not item.get('startDt'): continue
-            s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
-            e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            allow_day_raw = str(item.get('allowDay', ''))
-            allowed_days = [d.strip() for d in allow_day_raw.split(",") if d.strip().isdigit()]
-            
-            curr = s_dt
-            while curr <= e_dt:
-                if start_date <= curr <= end_date:
-                    if not allowed_days or str(curr.isoweekday()) in allowed_days:
-                        rows.append({
-                            'full_date': curr.strftime('%Y-%m-%d'),
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
-                            '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '인
+    return f"{['A', 'B', 'C'][diff % 3
