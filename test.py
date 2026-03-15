@@ -5,13 +5,12 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 줌 활성화
+# 1. 페이지 설정
 st.set_page_config(page_title="성의교정 대관 현황 조회", page_icon="📋", layout="wide")
 st.markdown('<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">', unsafe_allow_html=True)
 
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
-
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
 def get_shift(target_date):
@@ -50,41 +49,51 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# --- 화면 출력 ---
+# --- 사이드바 설정 ---
 with st.sidebar:
-    st.header("🔍 설정")
+    st.header("🔍 조회 설정")
     s_date = st.date_input("시작일", value=now_today)
     e_date = st.date_input("종료일", value=s_date)
     sel_bu = st.multiselect("건물 필터", options=BUILDING_ORDER, default=BUILDING_ORDER)
-    v_mode = st.radio("모드", ["모바일", "PC"], horizontal=True)
+    v_mode = st.radio("보기 모드", ["모바일", "PC"], horizontal=True)
 
 df = get_data(s_date, e_date)
 
 if not df.empty:
     for d_str in sorted(df['full_date'].unique()):
         d_obj = datetime.strptime(d_str, '%Y-%m-%d').date()
-        st.markdown(f'<div style="background-color:#f1f3f5; padding:10px; border-radius:5px; margin-top:20px; font-weight:bold;">'
-                    f'📅 {d_str} | {get_shift(d_obj)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="background-color:#f1f3f5; padding:10px; border-radius:5px; margin-top:30px;">'
+                    f'<h3>📅 {d_str} | 근무조: {get_shift(d_obj)}</h3></div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
-            b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu.replace(" ", ""))]
+            bu_clean = bu.replace(" ", "")
+            b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ", "") == bu_clean)]
+            
             if not b_df.empty:
                 st.markdown(f"#### 📍 {bu} ({len(b_df)}건)")
                 
-                if v_mode == "PC":
-                    st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
-                else:
-                    # 이미지 16:23 기준 모바일 리스트 디자인
-                    for _, r in b_df.iterrows():
-                        st.markdown(f"""
-                        <div style="border-bottom:1px solid #eee; padding:10px 0;">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <div style="font-weight:bold; font-size:15px;">{r['장소']}</div>
-                                <div style="color:#e74c3c; font-weight:bold; font-size:13px;">{r['시간']}</div>
-                                <div style="background-color:#27ae60; color:white; padding:2px 6px; border-radius:4px; font-size:11px;">{r['상태']}</div>
-                            </div>
-                            <div style="font-size:12px; color:#666; margin-top:4px;">{r['행사명']} | {r['부서']}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
+                # 원본 핵심: 당일과 기간 대관을 분리하여 출력
+                t_df = b_df[b_df['is_period'] == False]
+                p_df = b_df[b_df['is_period'] == True]
+                
+                for label, target_df in [("📌 당일 대관", t_df), ("🗓️ 기간 대관", p_df)]:
+                    if not target_df.empty:
+                        st.write(f"**{label}**")
+                        if v_mode == "PC":
+                            st.dataframe(target_df[['장소', '시간', '행사명', '부서', '인원', '부스', '상태']], use_container_width=True, hide_index=True)
+                        else:
+                            for _, r in target_df.iterrows():
+                                st.markdown(f"""
+                                <div style="border-bottom:1px solid #eee; padding:10px 0;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                                        <div style="font-weight:bold; font-size:15px;">{r['장소']}</div>
+                                        <div style="color:#e74c3c; font-weight:bold; font-size:13px;">{r['시간']}</div>
+                                        <div style="background-color:#27ae60; color:white; padding:2px 6px; border-radius:4px; font-size:11px;">{r['상태']}</div>
+                                    </div>
+                                    <div style="font-size:12px; color:#666; margin-top:4px;">{r['행사명']} | {r['부서']}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+            else:
+                pass # 내역 없는 건물은 표시 안함
 else:
-    st.info("내역이 없습니다.")
+    st.info("조회된 내역이 없습니다.")
