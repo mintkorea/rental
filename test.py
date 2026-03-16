@@ -97,53 +97,58 @@ def get_data(start_date, end_date):
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
-    c1, c2 = st.columns(2)
+    # [수정 사항] 메뉴 3열 정리
+    c1, c2, c3 = st.columns([1.5, 2, 1])
     with c1:
         s_date = st.date_input("시작일", value=now_today)
         e_date = st.date_input("종료일", value=s_date)
     with c2:
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
+    with c3:
         view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
-    
-    df = get_data(s_date, e_date)
-    if not df.empty:
-        st.download_button("📥 최종 가이드라인 엑셀 저장", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx")
+        # 데이터가 있을 때만 다운로드 버튼 표시
+        df = get_data(s_date, e_date)
+        if not df.empty:
+            st.download_button("📥 엑셀 저장", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
 
-curr = s_date
-while curr <= e_date:
-    d_str = curr.strftime('%Y-%m-%d')
-    day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
-    st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
-    for bu in sel_bu:
-        b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")] if not day_df.empty else pd.DataFrame()
-        st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
-        if not b_df.empty:
-            if view_mode == "가로 표":
-                # [수정 사항] 가로 표 셀 너비 최적화: 행사명 비중 확대
-                st.dataframe(
-                    b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'),
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "장소": st.column_config.TextColumn(width="medium"),
-                        "시간": st.column_config.TextColumn(width="small"),
-                        "행사명": st.column_config.TextColumn(width="large"), # 행사명 대폭 확대
-                        "부서": st.column_config.TextColumn(width="medium"),
-                        "인원": st.column_config.TextColumn(width="small"),
-                        "상태": st.column_config.TextColumn(width="small"),
-                    }
-                )
+# 리스트 출력 로직 (기존 유지)
+if not df.empty:
+    curr = s_date
+    while curr <= e_date:
+        d_str = curr.strftime('%Y-%m-%d')
+        day_df = df[df['full_date'] == d_str]
+        st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
+        for bu in sel_bu:
+            b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
+            st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+            if not b_df.empty:
+                if view_mode == "가로 표":
+                    st.dataframe(
+                        b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'),
+                        hide_index=True,
+                        use_container_width=True,
+                        column_config={
+                            "장소": st.column_config.TextColumn(width="medium"),
+                            "시간": st.column_config.TextColumn(width="small"),
+                            "행사명": st.column_config.TextColumn(width="large"),
+                            "부서": st.column_config.TextColumn(width="medium"),
+                            "인원": st.column_config.TextColumn(width="small"),
+                            "상태": st.column_config.TextColumn(width="small"),
+                        }
+                    )
+                else:
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        st.markdown(f'''
+                            <div class="mobile-card">
+                                <div class="row-1">
+                                    <span class="loc-text">📍 {r["장소"]}</span>
+                                    <span class="time-text">🕒 {r["시간"]}</span>
+                                    <span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span>
+                                </div>
+                                <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
+                            </div>''', unsafe_allow_html=True)
             else:
-                for _, r in b_df.sort_values('시간').iterrows():
-                    st.markdown(f'''
-                        <div class="mobile-card">
-                            <div class="row-1">
-                                <span class="loc-text">📍 {r["장소"]}</span>
-                                <span class="time-text">🕒 {r["시간"]}</span>
-                                <span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span>
-                            </div>
-                            <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                        </div>''', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
-    curr += timedelta(days=1)
+                st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+        curr += timedelta(days=1)
+else:
+    st.error("데이터를 가져오지 못했습니다.")
