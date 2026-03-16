@@ -46,7 +46,7 @@ def create_excel(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
-        worksheet = workbook.add_worksheet('대관현황')
+        worksheet = workbook.add_worksheet('성의교정대관현황')
         t_fmt = workbook.add_format({'bold': True, 'size': 16, 'align': 'center', 'valign': 'vcenter'})
         d_fmt = workbook.add_format({'bold': True, 'bg_color': '#3d444b', 'font_color': 'white', 'align': 'center', 'border': 1})
         b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'border': 1})
@@ -115,7 +115,7 @@ with st.expander("🔍 설정 (날짜/건물/다운로드)", expanded=True):
         view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
         df = get_data(s_date, e_date)
         if not df.empty:
-            st.download_button("📥 최종 규격 엑셀 저장", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+            st.download_button("📥 엑셀로 받기", data=create_excel(df, sel_bu), file_name=f"성의교정대관현황_{s_date}.xlsx", use_container_width=True)
 
 if not df.empty:
     curr = s_date
