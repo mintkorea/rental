@@ -6,7 +6,7 @@ import pytz
 import io
 
 # ==========================================
-# 1. 페이지 설정 및 UI CSS
+# 1. 페이지 설정 및 UI 디자인
 # ==========================================
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
@@ -16,37 +16,29 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
+    /* PC에서 표가 너무 퍼지지 않도록 폭 제한 */
     .block-container { padding: 1.5rem 2rem !important; max-width: 1000px; margin: 0 auto; }
+    
     .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; }
     .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 40px; margin-bottom: 10px; }
     .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 15px 0 8px 0; border-left: 5px solid #1E3A5F; padding: 5px 12px; background: #f8fafd; }
+    
+    /* 버튼 컴팩트 스타일 */
     .stDownloadButton button { border: 1px solid #1E3A5F !important; color: #1E3A5F !important; font-weight: bold !important; width: 100% !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 엑셀 생성 함수 (타이틀 16pt 추가)
+# 2. 엑셀 생성 함수 (기존 유지)
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = writer.book.add_worksheet('대관현황')
-        
-        # 스타일 정의
-        title_fmt = workbook.add_format({'bold': True, 'size': 16, 'align': 'center', 'valign': 'vcenter'})
+        workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
         t_fmt = workbook.add_format({'bold': True, 'bg_color': '#343a40', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'valign': 'vcenter', 'border': 1})
         h_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         c_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'shrink': True, 'font_size': 10})
-        
-        # 열 너비 설정
         worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 15); worksheet.set_column('C:C', 40); worksheet.set_column('D:D', 20); worksheet.set_column('E:F', 8)  
-        
         row = 0
-        # [수정] 엑셀 최상단 타이틀 추가 (16포인트)
-        worksheet.set_row(row, 30)
-        worksheet.merge_range(row, 0, row, 5, "성의교정 대관 현황", title_fmt)
-        row += 2 # 타이틀 아래 한 줄 비움
-        
         for d_str in sorted(df['full_date'].unique()):
             worksheet.set_row(row, 25); worksheet.merge_range(row, 0, row, 5, f"📅 {d_str}", t_fmt); row += 1
             for bu in selected_bu:
@@ -62,7 +54,7 @@ def create_excel_report(df, selected_bu):
                 row += 1
     return output.getvalue()
 
-# 3. 데이터 수집 및 중복 제거
+# 3. 데이터 수집 및 중복 제거 로직 [핵심 수정]
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -87,8 +79,10 @@ def get_data(s_date, e_date):
                         '상태': '확정' if item.get('status') == 'Y' else '대기'
                     })
                 curr += timedelta(days=1)
+        
         final_df = pd.DataFrame(rows)
         if not final_df.empty:
+            # 모든 컬럼이 동일한 중복 행 제거
             final_df = final_df.drop_duplicates().reset_index(drop=True)
         return final_df
     except:
@@ -119,9 +113,11 @@ while curr <= e_date:
     d_str = curr.strftime('%Y-%m-%d')
     day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
     st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
+    
     for bu in sel_bu:
         b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")] if not day_df.empty else pd.DataFrame()
         st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+        
         if not b_df.empty:
             if view_mode == "가로 표":
                 st.dataframe(
