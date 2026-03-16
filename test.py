@@ -128,4 +128,3 @@ else:
             else:
                 st.info("내역 없음")
         curr += timedelta(days=1)
-        
