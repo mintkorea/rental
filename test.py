@@ -15,10 +15,10 @@ st.markdown("""
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
     
-    /* [수정] 화면 가로 폭 제한 및 중앙 정렬 */
+    /* 화면 가로 폭 제한 및 중앙 정렬 */
     .main .block-container {
-        max-width: 1200px;  /* 가로 폭을 1200px로 제한 */
-        margin: 0 auto;     /* 중앙 정렬 */
+        max-width: 1200px;  /* 가로 폭 1200px 제한 */
+        margin: 0 auto;
         padding: 0.5rem 1rem !important;
     }
     
@@ -103,7 +103,8 @@ def get_data(start_date, end_date):
     except: return pd.DataFrame()
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
-with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
+with st.expander("🔍 설정 (날짜/건물/다운로드)", expanded=True):
+    # 상단 메뉴 3열 배치
     c1, c2, c3 = st.columns([1.5, 2, 1])
     with c1:
         s_date = st.date_input("시작일", value=now_today)
@@ -114,7 +115,7 @@ with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
         view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
         df = get_data(s_date, e_date)
         if not df.empty:
-            st.download_button("📥 엑셀 저장", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+            st.download_button("📥 최종 규격 엑셀 저장", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
 
 if not df.empty:
     curr = s_date
@@ -155,4 +156,4 @@ if not df.empty:
                 st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
         curr += timedelta(days=1)
 else:
-    st.error("데이터를 가져오지 못했습니다.")
+    st.info("선택한 날짜에 대관 데이터가 없거나 불러오는 중입니다.")
