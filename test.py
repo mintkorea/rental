@@ -6,7 +6,7 @@ import pytz
 import io
 
 # ==========================================
-# 1. 페이지 설정 및 UI 디자인
+# 1. 페이지 설정 및 강화된 UI CSS
 # ==========================================
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
@@ -16,45 +16,64 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
-    /* PC에서 표가 너무 퍼지지 않도록 폭 제한 */
-    .block-container { padding: 1.5rem 2rem !important; max-width: 1000px; margin: 0 auto; }
+    .block-container { padding: 1.5rem 3rem !important; max-width: 1200px; margin: 0 auto; }
     
-    .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; }
-    .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 40px; margin-bottom: 10px; }
-    .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 15px 0 8px 0; border-left: 5px solid #1E3A5F; padding: 5px 12px; background: #f8fafd; }
+    .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; letter-spacing: -1px; }
+    span[data-baseweb="tag"] { background-color: #1E3A5F !important; }
     
-    /* 버튼 컴팩트 스타일 */
-    .stDownloadButton button { border: 1px solid #1E3A5F !important; color: #1E3A5F !important; font-weight: bold !important; width: 100% !important; }
+    .date-bar { background-color: #343a40; color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 55px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .date-bar:first-of-type { margin-top: 0px; }
+
+    .bu-header { font-size: 18px; font-weight: bold; color: #1E3A5F; margin: 20px 0 10px 0; border-left: 6px solid #1E3A5F; padding: 8px 15px; background: #f8fafd; border-radius: 0 4px 4px 0; }
+    
+    .mobile-card { background: white; border: 1px solid #eef2f6; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+    .row-1 { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+    .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; }
+    .time-text { font-size: 14px; font-weight: 700; color: #d9534f; }
+    
+    .row-2 { font-size: 13px; color: #444; border-top: 1px solid #f1f3f5; padding-top: 10px; margin-top: 10px; line-height: 1.4; }
+    .no-data { color: #868e96; font-size: 13px; padding: 20px; background: #fcfcfc; border-radius: 8px; border: 1px dashed #dee2e6; text-align: center; }
+    
+    /* 버튼 스타일 살짝 보강 */
+    .stDownloadButton button { background-color: #f8fafd !important; border: 1px solid #1E3A5F !important; color: #1E3A5F !important; transition: 0.3s; }
+    .stDownloadButton button:hover { background-color: #1E3A5F !important; color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 엑셀 생성 함수 (기존 유지)
+# ==========================================
+# 2. 엑셀 생성 함수 (규정 수치 준수)
+# ==========================================
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
+        workbook = writer.book
+        worksheet = workbook.add_worksheet('대관현황')
         t_fmt = workbook.add_format({'bold': True, 'bg_color': '#343a40', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'valign': 'vcenter', 'border': 1})
         h_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'align': 'center', 'valign': 'vcenter', 'border': 1})
         c_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'shrink': True, 'font_size': 10})
-        worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 15); worksheet.set_column('C:C', 40); worksheet.set_column('D:D', 20); worksheet.set_column('E:F', 8)  
+
+        worksheet.set_column('A:A', 25); worksheet.set_column('B:B', 15); worksheet.set_column('C:C', 50); worksheet.set_column('D:D', 25); worksheet.set_column('E:F', 8)  
+
         row = 0
         for d_str in sorted(df['full_date'].unique()):
-            worksheet.set_row(row, 25); worksheet.merge_range(row, 0, row, 5, f"📅 {d_str}", t_fmt); row += 1
+            worksheet.set_row(row, 30); worksheet.merge_range(row, 0, row, 5, f"📅 {d_str}", t_fmt); row += 1
             for bu in selected_bu:
                 b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
-                worksheet.set_row(row, 25); worksheet.merge_range(row, 0, row, 5, f"🏢 {bu} ({len(b_df)}건)", b_fmt); row += 1
+                worksheet.set_row(row, 28); worksheet.merge_range(row, 0, row, 5, f"🏢 {bu} ({len(b_df)}건)", b_fmt); row += 1
                 for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']): worksheet.write(row, col, h, h_fmt)
                 row += 1
                 if not b_df.empty:
                     for _, r in b_df.sort_values('시간').iterrows():
-                        worksheet.set_row(row, 30); worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt); row += 1
+                        worksheet.set_row(row, 35); worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt); row += 1
                 else:
-                    worksheet.set_row(row, 30); worksheet.merge_range(row, 0, row, 5, "내역 없음", c_fmt); row += 1
+                    worksheet.set_row(row, 35); worksheet.merge_range(row, 0, row, 5, "대관 내역 없음", c_fmt); row += 1
                 row += 1
     return output.getvalue()
 
-# 3. 데이터 수집 및 중복 제거 로직 [핵심 수정]
+# ==========================================
+# 3. 데이터 로직
+# ==========================================
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -68,41 +87,46 @@ def get_data(s_date, e_date):
             curr = s
             while curr <= e:
                 if s_date <= curr <= e_date:
-                    rows.append({
-                        'full_date': curr.strftime('%Y-%m-%d'),
-                        '건물명': str(item.get('buNm', '')).strip(),
-                        '장소': item.get('placeNm', '') or '-',
-                        '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                        '행사명': item.get('eventNm', '') or '-',
-                        '부서': item.get('mgDeptNm', '') or '-',
-                        '인원': str(item.get('peopleCount', '0')),
-                        '상태': '확정' if item.get('status') == 'Y' else '대기'
-                    })
+                    rows.append({'full_date': curr.strftime('%Y-%m-%d'), '건물명': str(item.get('buNm', '')).strip(), '장소': item.get('placeNm', '') or '-', '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}", '행사명': item.get('eventNm', '') or '-', '부서': item.get('mgDeptNm', '') or '-', '인원': str(item.get('peopleCount', '0')), '상태': '확정' if item.get('status') == 'Y' else '대기'})
                 curr += timedelta(days=1)
-        
-        final_df = pd.DataFrame(rows)
-        if not final_df.empty:
-            # 모든 컬럼이 동일한 중복 행 제거
-            final_df = final_df.drop_duplicates().reset_index(drop=True)
-        return final_df
-    except:
-        return pd.DataFrame()
+        return pd.DataFrame(rows)
+    except: return pd.DataFrame()
 
-# 4. 상단 레이아웃
+# ==========================================
+# 4. 상단 설정 레이아웃 (개선된 배치)
+# ==========================================
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
-col1, col2, col3 = st.columns([1.5, 3, 1])
-with col1:
-    s_date = st.date_input("📅 기간 설정", value=now_today)
-    e_date = st.date_input("종료일", value=s_date, label_visibility="collapsed")
-with col2:
-    sel_bu = st.multiselect("🏢 건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"])
-    df = get_data(s_date, e_date)
-    if not df.empty:
-        st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx")
-with col3:
-    view_mode = st.radio("🖥️ 보기 모드", ["세로 카드", "가로 표"], horizontal=False)
 
-# 5. 리스트 출력
+df = pd.DataFrame() # 초기화
+
+with st.container():
+    col1, col2, col3 = st.columns([1.5, 3, 1])
+    
+    with col1:
+        s_date = st.date_input("📅 기간 설정", value=now_today)
+        e_date = st.date_input("종료일 (미선택 시 당일)", value=s_date, label_visibility="collapsed")
+        
+    with col2:
+        sel_bu = st.multiselect("🏢 건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"])
+        
+        # [핵심 요청 사항] 건물 선택 박스 바로 아래에 엑셀 버튼 위치
+        df = get_data(s_date, e_date)
+        if not df.empty:
+            st.download_button(
+                label="📥 최종 규격 엑셀 저장",
+                data=create_excel_report(df, sel_bu),
+                file_name=f"대관현황_{s_date}.xlsx",
+                use_container_width=True
+            )
+        
+    with col3:
+        view_mode = st.radio("🖥️ 보기 모드", ["세로 카드", "가로 표"], horizontal=False)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ==========================================
+# 5. 결과 리스트 출력
+# ==========================================
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
     diff = (t_date - date(2026, 3, 13)).days
@@ -124,17 +148,25 @@ while curr <= e_date:
                     b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'),
                     hide_index=True, use_container_width=True,
                     column_config={
-                        "장소": st.column_config.TextColumn("장소", width=140),
-                        "시간": st.column_config.TextColumn("시간", width=110),
-                        "행사명": st.column_config.TextColumn("행사명", width=250),
-                        "부서": st.column_config.TextColumn("부서", width=130),
-                        "인원": st.column_config.TextColumn("인원", width=50),
-                        "상태": st.column_config.TextColumn("상태", width=50),
+                        "장소": st.column_config.TextColumn("장소", width="medium"), 
+                        "시간": st.column_config.TextColumn("시간", width="small"),
+                        "행사명": st.column_config.TextColumn("행사명", width="large"), 
+                        "부서": st.column_config.TextColumn("부서", width="medium"),
+                        "인원": st.column_config.TextColumn("인원", width="small"),
+                        "상태": st.column_config.TextColumn("상태", width="small"),
                     }
                 )
             else:
                 for _, r in b_df.sort_values('시간').iterrows():
-                    st.markdown(f'<div style="background:white; border:1px solid #eee; padding:10px; border-radius:8px; margin-bottom:8px;"><b>📍 {r["장소"]}</b> <span style="color:#d9534f; float:right;">{r["시간"]}</span><br><small>{r["행사명"]} ({r["부서"]})</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'''
+                        <div class="mobile-card">
+                            <div class="row-1">
+                                <span class="loc-text">📍 {r["장소"]}</span>
+                                <span class="time-text">🕒 {r["시간"]}</span>
+                            </div>
+                            <div class="row-2"><b>{r["행사명"]}</b><br><span style="color:#666;">{r["부서"]} | {r["인원"]}명</span></div>
+                        </div>
+                    ''', unsafe_allow_html=True)
         else:
-            st.markdown('<div style="text-align:center; color:grey; font-size:12px; padding:10px;">내역 없음</div>', unsafe_allow_html=True)
+            st.markdown('<div class="no-data">ℹ️ 대관 내역이 없습니다.</div>', unsafe_allow_html=True)
     curr += timedelta(days=1)
