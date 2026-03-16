@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 사용자님 원본 CSS (image_021ddc.png 디자인 완벽 보존)
+# 1. 페이지 설정 및 사용자님 원본 CSS (절대 보존)
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -17,14 +17,12 @@ st.markdown("""
     .block-container { padding: 1.5rem 2rem !important; max-width: 1200px; margin: 0 auto; }
     .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 25px; }
     
-    /* 사용자님 설정창 레이아웃 */
     .stExpander { border: 1px solid #dfe3e8 !important; border-radius: 10px !important; background-color: #f9fbfc !important; }
     span[data-baseweb="tag"] { background-color: #ff4b4b !important; color: white !important; font-weight: 600 !important; }
     
     .date-bar { background-color: #3d444b; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 35px; margin-bottom: 12px; }
     .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 20px 0 10px 0; border-left: 5px solid #1E3A5F; padding-left: 12px; }
     
-    /* 사용자님 카드 디자인 (📍장소, 🕒시간 좌우 배치) */
     .mobile-card { background: white; border: 1px solid #eef2f6; border-radius: 8px; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
     .card-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .card-loc { font-size: 15px; font-weight: 800; color: #1E3A5F; }
@@ -36,12 +34,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 엑셀 생성 함수 (타이틀 16pt 적용)
+# 2. 엑셀 생성 함수 (요청하신 16pt 타이틀 적용)
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황')
+        
+        # 16pt 타이틀 서식
         title_fmt = workbook.add_format({'bold': True, 'size': 16, 'align': 'center', 'valign': 'vcenter'})
         t_fmt = workbook.add_format({'bold': True, 'bg_color': '#343a40', 'font_color': 'white', 'align': 'center', 'border': 1})
         b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'border': 1})
@@ -67,7 +67,7 @@ def create_excel_report(df, selected_bu):
                 row += 1
     return output.getvalue()
 
-# 3. 데이터 로직 (중복 제거의 원인을 찾아 해결)
+# 3. 데이터 로직 (초기 안정 버전으로 롤백)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -84,7 +84,6 @@ def get_data(s_date, e_date):
                 if s_date <= curr <= e_date:
                     rows.append({
                         'full_date': curr.strftime('%Y-%m-%d'),
-                        'reservationSeq': item.get('reservationSeq'), # 고유 번호로 중복 체크
                         '건물명': str(item.get('buNm', '')).strip(),
                         '장소': item.get('placeNm', '') or '-',
                         '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
@@ -95,11 +94,11 @@ def get_data(s_date, e_date):
                     })
                 curr += timedelta(days=1)
         df = pd.DataFrame(rows)
-        # 같은 날짜에 같은 고유 번호(reservationSeq)를 가진 데이터는 하나만 남김
-        return df.drop_duplicates(subset=['full_date', 'reservationSeq']).reset_index(drop=True) if not df.empty else df
+        # 중복 제거 (전체 행 기준)
+        return df.drop_duplicates().reset_index(drop=True) if not df.empty else df
     except: return pd.DataFrame()
 
-# 4. 상단 설정 UI (원본 레이아웃 보존)
+# 4. 상단 설정 UI (원본 레이아웃)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
@@ -113,7 +112,7 @@ with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
     if not df.empty:
         st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx")
 
-# 5. 리스트 출력 (원본 디자인 보존)
+# 5. 리스트 출력
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 def get_shift(t_date):
     diff = (t_date - date(2026, 3, 13)).days
