@@ -26,7 +26,6 @@ st.markdown("""
     .time-text { font-size: 12px; font-weight: 700; color: #e74c3c; margin-left: auto; margin-right: 8px; flex-shrink: 0; }
     .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 10px; color: white; font-weight: bold; background-color: #2ecc71; flex-shrink: 0; }
     
-    /* [가이드라인 반영] 행사명 2행 제한 및 폰트 최적화 */
     .row-2 { 
         font-size: 11px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 5px; margin-top: 5px;
         display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
@@ -54,7 +53,6 @@ def create_excel(df, selected_bu):
         row = 2
         for d_str in sorted(df['full_date'].unique()):
             worksheet.merge_range(row, 0, row, 5, f"📅 {d_str}", d_fmt); row += 1
-            # 사용자 지정 건물 순서(BUILDING_ORDER) 필터링 적용
             current_day_bu = [b for b in BUILDING_ORDER if b in selected_bu]
             for bu in current_day_bu:
                 b_df = df[(df['full_date'] == d_str) & (df['건물명'].str.replace(" ","") == bu.replace(" ",""))]
@@ -62,7 +60,7 @@ def create_excel(df, selected_bu):
                 for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']): worksheet.write(row, col, h, h_fmt)
                 row += 1
                 for _, r in b_df.sort_values('시간').iterrows():
-                    worksheet.set_row(row, 35) # [가이드라인] 행 높이 35 고정
+                    worksheet.set_row(row, 35)
                     worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt)
                     row += 1
                 row += 1
@@ -121,7 +119,20 @@ while curr <= e_date:
         st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
         if not b_df.empty:
             if view_mode == "가로 표":
-                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '상태']], hide_index=True, use_container_width=True)
+                # [수정 사항] 가로 표 셀 너비 최적화: 행사명 비중 확대
+                st.dataframe(
+                    b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'),
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "장소": st.column_config.TextColumn(width="medium"),
+                        "시간": st.column_config.TextColumn(width="small"),
+                        "행사명": st.column_config.TextColumn(width="large"), # 행사명 대폭 확대
+                        "부서": st.column_config.TextColumn(width="medium"),
+                        "인원": st.column_config.TextColumn(width="small"),
+                        "상태": st.column_config.TextColumn(width="small"),
+                    }
+                )
             else:
                 for _, r in b_df.sort_values('시간').iterrows():
                     st.markdown(f'''
