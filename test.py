@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 가이드라인 반영 CSS
+# 1. 페이지 설정 및 디자인 CSS
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -14,7 +14,14 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
-    .block-container { padding: 0.5rem 1rem !important; }
+    
+    /* [수정] 화면 가로 폭 제한 및 중앙 정렬 */
+    .main .block-container {
+        max-width: 1200px;  /* 가로 폭을 1200px로 제한 */
+        margin: 0 auto;     /* 중앙 정렬 */
+        padding: 0.5rem 1rem !important;
+    }
+    
     .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 35px; margin-bottom: 12px; font-size: 15px; }
     .date-bar:first-of-type { margin-top: 0px; }
@@ -97,7 +104,6 @@ def get_data(start_date, end_date):
 
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
-    # [수정 사항] 메뉴 3열 정리
     c1, c2, c3 = st.columns([1.5, 2, 1])
     with c1:
         s_date = st.date_input("시작일", value=now_today)
@@ -106,12 +112,10 @@ with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
     with c3:
         view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
-        # 데이터가 있을 때만 다운로드 버튼 표시
         df = get_data(s_date, e_date)
         if not df.empty:
             st.download_button("📥 엑셀 저장", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
 
-# 리스트 출력 로직 (기존 유지)
 if not df.empty:
     curr = s_date
     while curr <= e_date:
