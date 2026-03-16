@@ -6,7 +6,7 @@ import pytz
 import io
 
 # ==========================================
-# 1. 페이지 설정 및 UI CSS (디자인 복구)
+# 1. 페이지 설정 및 UI CSS (원형 디자인 복구)
 # ==========================================
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
@@ -16,43 +16,45 @@ st.markdown("""
     <style>
     [data-testid="stSidebar"] { display: none; }
     header { visibility: hidden; }
-    .block-container { padding: 1.5rem 2rem !important; max-width: 1100px; margin: 0 auto; }
+    .block-container { padding: 1rem 2rem !important; max-width: 1200px; margin: 0 auto; }
     
-    /* 타이틀 및 바 디자인 */
-    .main-title { font-size: 26px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 20px; }
-    .date-bar { background-color: #343a40; color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: bold; margin-top: 40px; margin-bottom: 15px; }
-    .bu-header { font-size: 18px; font-weight: bold; color: #1E3A5F; margin: 20px 0 10px 0; border-left: 6px solid #1E3A5F; padding: 8px 15px; background: #f8fafd; border-radius: 0 4px 4px 0; }
+    /* 메인 타이틀 */
+    .main-title { font-size: 24px; font-weight: 800; color: #1E3A5F; text-align: center; margin-bottom: 20px; }
     
-    /* 세로 카드 모드 디자인 복구 */
-    .mobile-card { background: white; border: 1px solid #eef2f6; border-radius: 10px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-    .card-row-1 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .card-loc { font-size: 15px; font-weight: 800; color: #1E3A5F; }
-    .card-time { font-size: 14px; font-weight: 700; color: #d9534f; }
-    .card-row-2 { font-size: 14px; color: #333; line-height: 1.5; border-top: 1px solid #f1f3f5; padding-top: 8px; }
+    /* 설정창 박스 디자인 (사진 기준 복구) */
+    .stExpander { border: 1px solid #dfe3e8 !important; border-radius: 12px !important; background-color: #f9fbfc !important; box-shadow: 0 2px 4px rgba(0,0,0,0.03) !important; }
     
-    /* 설정창(Expander) 내부 스타일 */
-    .stExpander { border: 1px solid #ddd !important; border-radius: 8px !important; background-color: #fcfcfc !important; }
-    span[data-baseweb="tag"] { background-color: #1E3A5F !important; }
+    /* 멀티셀렉트/태그 빨간색 유지 (사진 기준) */
+    span[data-baseweb="tag"] { background-color: #ff4b4b !important; color: white !important; font-weight: 600 !important; }
     
-    /* 엑셀 버튼 */
-    .stDownloadButton button { width: 100%; border: 1px solid #1E3A5F !important; color: #1E3A5F !important; font-weight: bold !important; height: 45px; }
-    .stDownloadButton button:hover { background-color: #1E3A5F !important; color: white !important; }
+    /* 날짜바 및 건물 헤더 */
+    .date-bar { background-color: #40464d; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 30px; margin-bottom: 10px; font-size: 16px; }
+    .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 15px 0 10px 0; border-left: 5px solid #1E3A5F; padding-left: 12px; }
+    
+    /* 세로 카드 디자인 (사진 image_0c8ae3.png 완벽 복구) */
+    .mobile-card { background: white; border: 1px solid #e0e6ed; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .card-loc { font-size: 15px; font-weight: 700; color: #333; }
+    .card-time { font-size: 14px; font-weight: 600; color: #d9534f; }
+    .card-content { font-size: 14px; color: #555; border-top: 1px solid #f8f9fa; padding-top: 8px; margin-top: 4px; line-height: 1.4; }
+    
+    /* 버튼 스타일 */
+    .stDownloadButton button { width: 100%; border: 1px solid #ccd1d9 !important; border-radius: 8px !important; font-weight: bold !important; height: 42px; background-color: white !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 엑셀 생성 함수 (16pt 타이틀 포함)
+# 2. 엑셀 생성 함수 (타이틀 16pt 반영)
 def create_excel_report(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook, worksheet = writer.book, writer.book.add_worksheet('대관현황')
         title_fmt = workbook.add_format({'bold': True, 'size': 16, 'align': 'center', 'valign': 'vcenter'})
-        t_fmt = workbook.add_format({'bold': True, 'bg_color': '#343a40', 'font_color': 'white', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-        b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'valign': 'vcenter', 'border': 1})
-        h_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'align': 'center', 'valign': 'vcenter', 'border': 1})
-        c_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'shrink': True, 'font_size': 10})
+        t_fmt = workbook.add_format({'bold': True, 'bg_color': '#343a40', 'font_color': 'white', 'align': 'center', 'border': 1})
+        b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'border': 1})
+        h_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'align': 'center', 'border': 1})
+        c_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True, 'font_size': 10})
         
-        worksheet.set_column('A:A', 20); worksheet.set_column('B:B', 15); worksheet.set_column('C:C', 45); worksheet.set_column('D:D', 20); worksheet.set_column('E:F', 10)  
-        
+        worksheet.set_column('A:F', 18)
         worksheet.merge_range('A1:F1', "성의교정 대관 현황", title_fmt)
         row = 2
         for d_str in sorted(df['full_date'].unique()):
@@ -70,7 +72,7 @@ def create_excel_report(df, selected_bu):
                 row += 1
     return output.getvalue()
 
-# 3. 데이터 로직 (중복 제거 포함)
+# 3. 데이터 로직 (중복 제거)
 @st.cache_data(ttl=60)
 def get_data(s_date, e_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -90,18 +92,21 @@ def get_data(s_date, e_date):
         return df.drop_duplicates().reset_index(drop=True) if not df.empty else df
     except: return pd.DataFrame()
 
-# 4. 설정 레이아웃 (검색창 디자인 복구)
+# 4. 설정 UI (사진 image_0d0ea3.png 기준 레이아웃 복구)
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
 with st.expander("🔍 설정 및 엑셀 다운로드", expanded=True):
-    c1, c2 = st.columns([1, 1.2])
-    with c1:
-        s_date = st.date_input("시작일", value=now_today)
-        e_date = st.date_input("종료일", value=s_date)
-    with c2:
-        sel_bu = st.multiselect("건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"])
-        view_mode = st.radio("보기 모드", ["세로 카드", "가로 표"], horizontal=True)
+    col_a, col_b = st.columns([1, 1.5])
+    with col_a:
+        st.write("**📅 기간 설정**")
+        s_date = st.date_input("시작일", value=now_today, label_visibility="collapsed")
+        e_date = st.date_input("종료일", value=s_date, label_visibility="collapsed")
+    with col_b:
+        st.write("**🏢 건물 및 보기 설정**")
+        sel_bu = st.multiselect("건물 선택", options=["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"], default=["성의회관", "의생명산업연구원"], label_visibility="collapsed")
+        view_mode = st.radio("모드 선택", ["세로 카드", "가로 표"], horizontal=True, label_visibility="collapsed")
     
+    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
     df = get_data(s_date, e_date)
     if not df.empty:
         st.download_button("📥 최종 규격 엑셀 저장", data=create_excel_report(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx")
@@ -130,13 +135,16 @@ while curr <= e_date:
                 for _, r in b_df.sort_values('시간').iterrows():
                     st.markdown(f'''
                         <div class="mobile-card">
-                            <div class="card-row-1">
+                            <div class="card-top">
                                 <span class="card-loc">📍 {r["장소"]}</span>
                                 <span class="card-time">🕒 {r["시간"]}</span>
                             </div>
-                            <div class="card-row-2"><b>{r["행사명"]}</b><br><span style="color:#666; font-size:13px;">{r["부서"]} | {r["인원"]}명 | {r["상태"]}</span></div>
+                            <div class="card-content">
+                                <b>{r["행사명"]}</b><br>
+                                <span style="color:#777; font-size:13px;">{r["부서"]} | {r["인원"]}명 | {r["상태"]}</span>
+                            </div>
                         </div>
                     ''', unsafe_allow_html=True)
         else:
-            st.markdown('<div style="text-align:center; color:#999; padding:20px; font-size:14px;">대관 내역이 없습니다.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="text-align:center; color:#bbb; padding:15px; font-size:13px;">내역 없음</div>', unsafe_allow_html=True)
     curr += timedelta(days=1)
