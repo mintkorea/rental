@@ -52,10 +52,11 @@ def create_excel(df, selected_bu):
                 worksheet.merge_range(row, 0, row, 5, f"🏢 {bu} ({len(b_df)}건)", b_fmt); row += 1
                 for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']): worksheet.write(row, col, h, h_fmt)
                 row += 1
-                for _, r in b_df.sort_values('시간').iterrows():
-                    worksheet.set_row(row, 35) # 행 높이 35
-                    worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt)
-                    row += 1
+                if not b_df.empty:
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        worksheet.set_row(row, 35) # 행 높이 35
+                        worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt)
+                        row += 1
                 row += 1
     return output.getvalue()
 
@@ -113,3 +114,17 @@ while curr <= e_d:
     day_df = df[df['full_date'] == d_str] if not df.empty else pd.DataFrame()
     st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
     for bu in bu_s:
+        b_df = day_df[day_df['건물명'] == bu] if not day_df.empty else pd.DataFrame()
+        st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+        if not b_df.empty:
+            if v_m == "가로 표":
+                st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'), hide_index=True, use_container_width=True)
+            else:
+                for _, r in b_df.sort_values('시간').iterrows():
+                    st.markdown(f'''
+                        <div class="mobile-card">
+                            <div class="card-row-top"><span class="card-loc">📍 {r["장소"]}</span><span class="card-time">🕒 {r["시간"]}</span></div>
+                            <div class="card-event">{r["행사명"]}</div>
+                            <div class="card-info">{r["부서"]} | {r["인원"]}명 | {r["상태"]}</div>
+                        </div>''', unsafe_allow_html=True)
+    curr += timedelta(days=1)
