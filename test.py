@@ -1,10 +1,22 @@
 import streamlit as st
 
-# 탭을 사용하면 모바일에서도 상단 가로 메뉴처럼 작동합니다.
-tab1, tab2, tab3, tab4 = st.tabs(["🏠 홈", "📅 일정", "📞 연락망", "⚙️ 설정"])
+# 모바일에서도 컬럼을 가로로 유지하는 CSS
+st.markdown("""
+    <style>
+    [data-testid="column"] {
+        width: calc(25% - 1rem) !important;  /* 4개 메뉴 기준, 간격 고려 */
+        flex: 1 1 calc(25% - 1rem) !important;
+        min-width: 0px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-with tab1:
-    st.write("홈 화면 콘텐츠")
-with tab2:
-    st.write("시설 예약 현황 등 일정 관리")
-# ... 나머지 탭 구성
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.button("🏠 홈")
+with col2:
+    st.button("📅 일정")
+with col3:
+    st.button("📞 연락")
+with col4:
+    st.button("⚙️ 설정")
