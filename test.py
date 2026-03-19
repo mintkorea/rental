@@ -1,15 +1,10 @@
-from streamlit_option_menu import option_menu
 import streamlit as st
 
-selected = option_menu(
-    menu_title=None, # 제목 없음
-    options=["홈", "일정", "연락처", "설정"], 
-    icons=["house", "calendar", "person-rolodex", "gear"], 
-    menu_icon="cast", 
-    default_index=0, 
-    orientation="horizontal",
-)
+# 탭을 사용하면 모바일에서도 상단 가로 메뉴처럼 작동합니다.
+tab1, tab2, tab3, tab4 = st.tabs(["🏠 홈", "📅 일정", "📞 연락망", "⚙️ 설정"])
 
-if selected == "홈":
-    st.write("홈 화면입니다.")
-# ... 선택된 메뉴에 따른 로직
+with tab1:
+    st.write("홈 화면 콘텐츠")
+with tab2:
+    st.write("시설 예약 현황 등 일정 관리")
+# ... 나머지 탭 구성
