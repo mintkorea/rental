@@ -55,33 +55,26 @@ def get_default_meal():
 if 'selected_meal' not in st.session_state:
     st.session_state.selected_meal = get_default_meal()
 
-# 3. [핵심 수정] 모바일 가로 1/5 강제 배분 스타일
+# 3. [초강력 CSS] 모바일 5분할 강제 고정
 st.markdown("""
 <style>
-    .block-container { padding: 1rem 0.5rem !important; max-width: 500px !important; }
+    .block-container { padding: 1rem 0.3rem !important; max-width: 500px !important; }
     header { visibility: hidden; }
     
-    /* 날짜 및 네비게이션 */
-    .date-box { text-align: center; background: #F8FAFF; padding: 15px 10px 8px; border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none; }
-    .res-sub-title { font-size: 18px !important; font-weight: 800; color: #333; }
-    .nav-bar { display: flex; width: 100%; background: white; border: 1px solid #D1D9E6; border-radius: 0 0 10px 10px; margin-bottom: 20px; }
-    .nav-btn { flex: 1; text-align: center; padding: 10px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 13px; border-right: 1px solid #F0F0F0; }
-    
-    /* [수정] 모바일에서 컬럼 너비를 20%로 강제 고정 */
-    div[data-testid="column"] {
-        flex: 1 1 20% !important; /* 5개이므로 20% */
-        width: 20% !important;    /* 너비 강제 고정 */
-        min-width: 0px !important;
-        padding: 0 1px !important;
-    }
-    
-    /* 컬럼 부모 컨테이너 가로 정렬 */
+    /* [핵심] 모든 기기에서 가로 배열 유지 및 너비 강제 */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
-        align-items: flex-end !important;
         width: 100% !important;
+        gap: 2px !important; /* 버튼 사이 아주 미세한 간격 */
+    }
+    
+    /* [핵심] 컬럼의 너비를 화면 폭(vw) 기준으로 강제 배분 */
+    div[data-testid="column"] {
+        width: 19vw !important; /* 5개 버튼이 화면을 넘지 않게 약 20%씩 배분 */
+        flex: 1 1 auto !important;
+        min-width: 50px !important; /* 최소 너비 확보 */
     }
     
     button { 
@@ -94,6 +87,7 @@ st.markdown("""
         margin-bottom: -1px !important;
         white-space: nowrap !important;
         width: 100% !important;
+        padding: 0 !important;
     }
 
     .menu-card { 
@@ -105,8 +99,15 @@ st.markdown("""
         box-shadow: 0 8px 20px rgba(0,0,0,0.08); 
         position: relative;
         z-index: 10;
+        width: 100%;
     }
     .msg-box { text-align: center; background: #f8f9fa; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: bold; color: #666; margin-top: 15px; }
+    
+    /* 날짜 관련 스타일 */
+    .date-box { text-align: center; background: #F8FAFF; padding: 15px 10px 8px; border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none; }
+    .res-sub-title { font-size: 18px !important; font-weight: 800; color: #333; }
+    .nav-bar { display: flex; width: 100%; background: white; border: 1px solid #D1D9E6; border-radius: 0 0 10px 10px; margin-bottom: 20px; }
+    .nav-btn { flex: 1; text-align: center; padding: 10px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 13px; border-right: 1px solid #F0F0F0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -132,7 +133,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 5. 고유 컬러 탭 버튼 (1/5 너비 적용)
+# 5. 고유 컬러 탭 버튼 (vw 단위로 너비 고정)
 color_theme = {"조식": "#E95444", "간편식": "#F1A33B", "중식": "#8BC34A", "석식": "#4A90E2", "야식": "#9C27B0"}
 cols = st.columns(len(color_theme))
 
@@ -165,9 +166,9 @@ if meal_data:
     st.markdown(f"""
         <div class="menu-card" style="--c: {sel_color};">
             <div style="font-size: 15px; font-weight: bold; color: {sel_color}; margin-bottom: 8px;">{st.session_state.selected_meal}</div>
-            <div style="font-size: 22px; font-weight: 800; color: #111; margin-bottom: 15px; line-height: 1.3;">{meal_info['menu']}</div>
+            <div style="font-size: 21px; font-weight: 800; color: #111; margin-bottom: 12px; line-height: 1.3;">{meal_info['menu']}</div>
             <div style="height: 1px; background: #eee; width: 40%; margin: 0 auto;"></div>
-            <div style="color: #555; font-size: 15px; margin-top: 18px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
+            <div style="color: #555; font-size: 15px; margin-top: 15px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -183,7 +184,7 @@ if st.session_state.selected_meal in meal_times:
             diff = t_dt_s - now
             msg = f"⏳ {st.session_state.selected_meal} 시작까지 {diff.seconds//3600}시간 {(diff.seconds%3600)//60}분 남음"
         elif now <= t_dt_e:
-            msg = f"🍴 {st.session_state.selected_meal} 배식 중! 맛있게 드세요."
+            msg = f"🍴 {st.session_state.selected_meal} 배식 중!"
         else:
             msg = "🚩 배식이 종료된 메뉴입니다."
 
