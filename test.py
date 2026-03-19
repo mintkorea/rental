@@ -36,51 +36,63 @@ if 'selected_meal' not in st.session_state:
     elif t < time(19, 20): st.session_state.selected_meal = "석식"
     else: st.session_state.selected_meal = "중식"
 
-# 4. CSS: 버튼 색상 및 가로 배열 강제 적용
+# 4. CSS: 모바일 가로 유지 및 특정 버튼 색상 타겟팅
 color_theme = {"조식": "#E95444", "간편식": "#F1A33B", "중식": "#8BC34A", "석식": "#4A90E2", "야식": "#9C27B0"}
 
-# 버튼별 커스텀 스타일 생성
-button_styles = ""
-for m, color in color_theme.items():
+# 식단 탭 버튼 전용 스타일 (상단 날짜 버튼과 분리하기 위해 div[data-testid="column"] 조합 사용)
+tab_styles = ""
+for i, (m, color) in enumerate(color_theme.items()):
     is_sel = (st.session_state.selected_meal == m)
-    bg = color if is_sel else "#f0f2f6"
+    bg = color if is_sel else "#F0F2F6"
     txt = "white" if is_sel else "#555"
-    border = color if is_sel else "#D1D9E6"
-    
-    # Streamlit 버튼의 고유 키를 이용한 CSS 타겟팅
-    button_styles += f"""
-        div[data-testid="stHorizontalBlock"] div:nth-child({list(color_theme.keys()).index(m)+1}) button {{
+    tab_styles += f"""
+        /* 2번째 가로 블록(식단 탭) 내의 버튼들만 타겟팅 */
+        div[data-testid="stVerticalBlock"] > div:nth-child(7) div[data-testid="column"]:nth-child({i+1}) button {{
             background-color: {bg} !important;
             color: {txt} !important;
-            border: 1px solid {border} !important;
+            border: 1px solid {color if is_sel else "#D1D9E6"} !important;
             border-radius: 10px 10px 0 0 !important;
             height: 45px !important;
-            font-weight: 800 !important;
+            font-size: 13px !important;
             margin-bottom: -1px !important;
         }}
     """
 
 st.markdown(f"""
 <style>
-    .block-container {{ padding: 1rem 0.6rem !important; max-width: 500px !important; }}
+    .block-container {{ padding: 1rem 0.5rem !important; max-width: 500px !important; }}
     header {{ visibility: hidden; }}
-    {button_styles}
+    
+    /* [핵심] 모바일에서도 컬럼 가로 배열 유지 */
+    div[data-testid="column"] {{
+        min-width: 0px !important;
+        flex: 1 1 0% !important;
+    }}
+    div[data-testid="stHorizontalBlock"] {{
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: flex-end !important;
+    }}
+
+    {tab_styles}
+
     .date-header {{ text-align: center; background: #F1F4F9; padding: 12px; border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none; }}
     .menu-card {{ 
         border: 1px solid #D1D9E6; border-top: 6px solid var(--c); border-radius: 0 0 15px 15px; 
-        padding: 40px 20px; text-align: center; background: white; 
+        padding: 35px 15px; text-align: center; background: white; 
         box-shadow: 0 8px 20px rgba(0,0,0,0.05); margin-bottom: 15px;
     }}
 </style>
 """, unsafe_allow_html=True)
 
 # 5. UI 렌더링
-st.markdown('<div style="text-align:center; padding-bottom:10px;"><span style="font-size:22px; font-weight:800; color:#1E3A5F;">🍴 성의교정 주간 식단</span></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; padding-bottom:5px;"><span style="font-size:20px; font-weight:800; color:#1E3A5F;">🍴 성의교정 주간 식단</span></div>', unsafe_allow_html=True)
 
 d = st.session_state.target_date
-st.markdown(f'<div class="date-header"><span style="font-size:17px; font-weight:800;">{d.strftime("%Y.%m.%d")} 식단</span></div>', unsafe_allow_html=True)
+st.markdown(f'<div class="date-header"><span style="font-size:16px; font-weight:800;">{d.strftime("%Y.%m.%d")} 식단</span></div>', unsafe_allow_html=True)
 
-# 날짜 이동 버튼 (이건 기본 스타일 유지)
+# [가로 블록 1] 날짜 컨트롤러
 c1, c2, c3 = st.columns(3)
 if c1.button("◀ 이전", use_container_width=True): 
     st.session_state.target_date -= timedelta(days=1); st.rerun()
@@ -91,14 +103,14 @@ if c3.button("다음 ▶", use_container_width=True):
 
 st.write("") 
 
-# 6. 핵심: 무지개색 인덱스 탭 (버튼 가로 배열)
+# [가로 블록 2] 식단 인덱스 탭 (모바일 가로 고정)
 m_cols = st.columns(len(color_theme))
 for i, m in enumerate(color_theme.keys()):
     if m_cols[i].button(m, use_container_width=True):
         st.session_state.selected_meal = m
         st.rerun()
 
-# 7. 카드 본문
+# 6. 카드 본문
 if meal_data:
     date_key = d.strftime("%Y-%m-%d")
     meal_info = meal_data.get(date_key, {}).get(st.session_state.selected_meal, {"menu": "정보 없음", "side": "등록된 식단이 없습니다."})
@@ -106,9 +118,9 @@ if meal_data:
 
     st.markdown(f"""
         <div class="menu-card" style="--c: {sel_color};">
-            <div style="font-size: 14px; font-weight: bold; color: {sel_color}; margin-bottom: 8px;">{st.session_state.selected_meal}</div>
-            <div style="font-size: 22px; font-weight: 800; color: #111; margin-bottom: 20px; line-height: 1.4; word-break: keep-all;">{meal_info['menu']}</div>
+            <div style="font-size: 13px; font-weight: bold; color: {sel_color}; margin-bottom: 5px;">{st.session_state.selected_meal}</div>
+            <div style="font-size: 21px; font-weight: 800; color: #111; margin-bottom: 15px; line-height: 1.3; word-break: keep-all;">{meal_info['menu']}</div>
             <div style="height: 1.5px; background: #f0f0f0; width: 40%; margin: 0 auto;"></div>
-            <div style="color: #555; font-size: 15px; margin-top: 25px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
+            <div style="color: #555; font-size: 15px; margin-top: 20px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
         </div>
     """, unsafe_allow_html=True)
