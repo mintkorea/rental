@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 
-# 1. 기초 설정 및 시간대
+# 1. 기초 설정
 KST = ZoneInfo("Asia/Seoul")
 def get_now(): return datetime.now(KST)
 
@@ -25,25 +25,15 @@ def load_meal_data(url):
                 "side": str(row['side'])
             }
         return structured_data
-    except Exception:
-        return None
+    except Exception: return None
 
-# 근무조 계산
-def get_work_shift(target_date):
-    anchor = datetime(2026, 3, 13).date()
-    diff = (target_date - anchor).days
-    shifts = [{"n": "A조", "bg": "#FF9800"}, {"n": "B조", "bg": "#E91E63"}, {"n": "C조", "bg": "#2196F3"}]
-    return shifts[diff % 3]
-
-# 2. 데이터 불러오기 및 세션 초기화
+# 2. 데이터 및 세션 초기화
 CSV_URL = "https://docs.google.com/spreadsheets/d/1l07s4rubmeB5ld8oJayYrstL34UPKtxQwYptIocgKV0/export?format=csv"
 meal_data = load_meal_data(CSV_URL)
 
 now = get_now()
-curr_date = now.date()
-
 if 'target_date' not in st.session_state:
-    st.session_state.target_date = curr_date
+    st.session_state.target_date = now.date()
 
 def get_default_meal():
     t = now.time()
@@ -55,108 +45,86 @@ def get_default_meal():
 if 'selected_meal' not in st.session_state:
     st.session_state.selected_meal = get_default_meal()
 
-# 3. [초강력 CSS] 모바일 5분할 강제 고정
+# 3. 쿼리 파라미터를 통한 탭 클릭 감지 (HTML 버튼 연동용)
+params = st.query_params
+if "meal" in params:
+    st.session_state.selected_meal = params["meal"]
+
+# 4. 전체 스타일 정의 (완벽 가로 고정)
 st.markdown("""
 <style>
-    .block-container { padding: 1rem 0.3rem !important; max-width: 500px !important; }
+    .block-container { padding: 1rem 0.5rem !important; max-width: 500px !important; }
     header { visibility: hidden; }
     
-    /* [핵심] 모든 기기에서 가로 배열 유지 및 너비 강제 */
-    div[data-testid="stHorizontalBlock"] {
+    /* [핵심] 커스텀 HTML 탭 디자인 */
+    .tab-container {
         display: flex !important;
         flex-direction: row !important;
-        flex-wrap: nowrap !important;
         width: 100% !important;
-        gap: 2px !important; /* 버튼 사이 아주 미세한 간격 */
+        justify-content: space-between !important;
+        margin-bottom: -1px !important;
+        gap: 2px !important;
     }
-    
-    /* [핵심] 컬럼의 너비를 화면 폭(vw) 기준으로 강제 배분 */
-    div[data-testid="column"] {
-        width: 19vw !important; /* 5개 버튼이 화면을 넘지 않게 약 20%씩 배분 */
-        flex: 1 1 auto !important;
-        min-width: 50px !important; /* 최소 너비 확보 */
-    }
-    
-    button { 
-        border-radius: 10px 10px 0 0 !important; 
-        height: 42px !important; 
-        font-weight: 800 !important; 
-        font-size: 11px !important; 
+    .tab-item {
+        flex: 1 !important;
+        text-align: center !important;
+        padding: 12px 0 !important;
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        border-radius: 10px 10px 0 0 !important;
         border: 1px solid #D1D9E6 !important;
         border-bottom: none !important;
-        margin-bottom: -1px !important;
-        white-space: nowrap !important;
-        width: 100% !important;
-        padding: 0 !important;
+        text-decoration: none !important;
+        transition: 0.2s;
     }
-
+    
     .menu-card { 
         border-top: 6px solid var(--c); 
         border-radius: 0 0 15px 15px; 
-        padding: 30px 15px; 
+        padding: 35px 15px; 
         text-align: center; 
         background: white; 
         box-shadow: 0 8px 20px rgba(0,0,0,0.08); 
-        position: relative;
-        z-index: 10;
-        width: 100%;
     }
-    .msg-box { text-align: center; background: #f8f9fa; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: bold; color: #666; margin-top: 15px; }
     
-    /* 날짜 관련 스타일 */
-    .date-box { text-align: center; background: #F8FAFF; padding: 15px 10px 8px; border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none; }
-    .res-sub-title { font-size: 18px !important; font-weight: 800; color: #333; }
-    .nav-bar { display: flex; width: 100%; background: white; border: 1px solid #D1D9E6; border-radius: 0 0 10px 10px; margin-bottom: 20px; }
-    .nav-btn { flex: 1; text-align: center; padding: 10px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 13px; border-right: 1px solid #F0F0F0; }
+    /* 날짜 네비게이션용 */
+    .date-nav { display: flex; background: white; border: 1px solid #D1D9E6; border-radius: 12px; margin-bottom: 20px; overflow: hidden; }
+    .date-nav a { flex: 1; text-align: center; padding: 12px; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 14px; border-right: 1px solid #F0F0F0; }
 </style>
 """, unsafe_allow_html=True)
 
-# 헤더
-st.markdown('<div style="text-align:center; padding-bottom:5px;"><span style="font-size:26px; font-weight:800; color:#1E3A5F;">🍴 성의교정 주간 식단</span></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; padding-bottom:15px;"><span style="font-size:26px; font-weight:800; color:#1E3A5F;">🍴 성의교정 주간 식단</span></div>', unsafe_allow_html=True)
 
-# 4. 날짜 네비게이션
+# 5. 날짜 네비게이션 (생략 가능하나 유지를 위해 HTML로 구현)
 d = st.session_state.target_date
-shift = get_work_shift(d)
-w_list = ["월","화","수","목","금","토","일"]
-w_str = w_list[d.weekday()]
-w_class = "color: #0000FF;" if d.weekday() == 5 else ("color: #FF0000;" if d.weekday() == 6 else "")
-
+date_str = d.strftime("%Y.%m.%d")
 st.markdown(f"""
-<div class="date-box">
-    <span class="res-sub-title">{d.strftime("%Y.%m.%d")}.<span style="{w_class}">({w_str})</span>
-    <span style="background:{shift['bg']}; color:white; padding:2px 10px; border-radius:12px; font-size:14px; margin-left:5px;">{shift['n']}</span></span>
+<div style="text-align:center; background:#F8FAFF; padding:15px; border-radius:12px 12px 0 0; border:1px solid #D1D9E6; border-bottom:none;">
+    <span style="font-size:18px; font-weight:800;">{date_str} 식단</span>
 </div>
-<div class="nav-bar">
-    <a href="./?d={(d-timedelta(1)).strftime('%Y-%m-%d')}" target="_self" class="nav-btn">◀ 이전</a>
-    <a href="./?d={curr_date.strftime('%Y-%m-%d')}" target="_self" class="nav-btn">오늘</a>
-    <a href="./?d={(d+timedelta(1)).strftime('%Y-%m-%d')}" target="_self" class="nav-btn">다음 ▶</a>
+<div class="date-nav">
+    <a href="./?d={(d-timedelta(1)).strftime('%Y-%m-%d')}" target="_self">◀ 이전</a>
+    <a href="./?d={now.date().strftime('%Y-%m-%d')}" target="_self">오늘</a>
+    <a href="./?d={(d+timedelta(1)).strftime('%Y-%m-%d')}" target="_self">다음 ▶</a>
 </div>
 """, unsafe_allow_html=True)
 
-# 5. 고유 컬러 탭 버튼 (vw 단위로 너비 고정)
+# 6. [결정적 해결책] HTML 커스텀 가로 탭
 color_theme = {"조식": "#E95444", "간편식": "#F1A33B", "중식": "#8BC34A", "석식": "#4A90E2", "야식": "#9C27B0"}
-cols = st.columns(len(color_theme))
+tab_html = '<div class="tab-container">'
 
-for i, (m, color) in enumerate(color_theme.items()):
-    is_selected = (st.session_state.selected_meal == m)
-    
-    btn_style = f"""
-    <style>
-        div[data-testid="column"]:nth-child({i+1}) button {{
-            background-color: {color if is_selected else "#f8f9fa"} !important;
-            color: {"white" if is_selected else "#666"} !important;
-            border-color: {color if is_selected else "#D1D9E6"} !important;
-            opacity: {1 if is_selected else 0.5} !important;
-        }}
-    </style>
-    """
-    st.markdown(btn_style, unsafe_allow_html=True)
-    
-    if cols[i].button(m, use_container_width=True):
-        st.session_state.selected_meal = m
-        st.rerun()
+for m, color in color_theme.items():
+    is_sel = (st.session_state.selected_meal == m)
+    bg = color if is_sel else "#f8f9fa"
+    txt = "white" if is_sel else "#666"
+    opacity = "1" if is_sel else "0.6"
+    # 클릭 시 URL 파라미터를 변경하여 페이지를 리로드하는 방식
+    tab_html += f'<a href="./?meal={m}" target="_self" class="tab-item" style="background:{bg}; color:{txt}; opacity:{opacity};">{m}</a>'
 
-# 6. 식단 카드 출력
+tab_html += '</div>'
+st.markdown(tab_html, unsafe_allow_html=True)
+
+# 7. 식단 내용 표시
 if meal_data:
     date_key = d.strftime("%Y-%m-%d")
     day_meals = meal_data.get(date_key, {})
@@ -165,27 +133,12 @@ if meal_data:
 
     st.markdown(f"""
         <div class="menu-card" style="--c: {sel_color};">
-            <div style="font-size: 15px; font-weight: bold; color: {sel_color}; margin-bottom: 8px;">{st.session_state.selected_meal}</div>
-            <div style="font-size: 21px; font-weight: 800; color: #111; margin-bottom: 12px; line-height: 1.3;">{meal_info['menu']}</div>
+            <div style="font-size: 16px; font-weight: bold; color: {sel_color}; margin-bottom: 10px;">{st.session_state.selected_meal}</div>
+            <div style="font-size: 24px; font-weight: 800; color: #111; margin-bottom: 15px; line-height: 1.3;">{meal_info['menu']}</div>
             <div style="height: 1px; background: #eee; width: 40%; margin: 0 auto;"></div>
-            <div style="color: #555; font-size: 15px; margin-top: 15px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
+            <div style="color: #555; font-size: 16px; margin-top: 20px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
+        </div>
+        <div style="text-align: center; background: #f8f9fa; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; color: #555; margin-top: 20px;">
+            💡 즐거운 식사 시간 되세요!
         </div>
     """, unsafe_allow_html=True)
-
-# 7. 시간 안내 메시지
-meal_times = {"조식": (time(7, 0), time(9, 0)), "중식": (time(11, 20), time(14, 0)), "석식": (time(17, 20), time(19, 20))}
-msg = "💡 즐거운 식사 시간 되세요!"
-if st.session_state.selected_meal in meal_times:
-    s_t, e_t = meal_times[st.session_state.selected_meal]
-    t_dt_s = datetime.combine(d, s_t).replace(tzinfo=KST)
-    t_dt_e = datetime.combine(d, e_t).replace(tzinfo=KST)
-    if d == curr_date:
-        if now < t_dt_s:
-            diff = t_dt_s - now
-            msg = f"⏳ {st.session_state.selected_meal} 시작까지 {diff.seconds//3600}시간 {(diff.seconds%3600)//60}분 남음"
-        elif now <= t_dt_e:
-            msg = f"🍴 {st.session_state.selected_meal} 배식 중!"
-        else:
-            msg = "🚩 배식이 종료된 메뉴입니다."
-
-st.markdown(f'<div class="msg-box">{msg}</div>', unsafe_allow_html=True)
