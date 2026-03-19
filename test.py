@@ -9,7 +9,7 @@ def get_now(): return datetime.now(KST)
 
 st.set_page_config(page_title="성의교정 식단 가이드", page_icon="🍴", layout="centered")
 
-# [데이터 로딩] 캐싱 적용
+# [데이터 로딩]
 @st.cache_data(ttl=600)
 def load_meal_data(url):
     try:
@@ -28,7 +28,7 @@ def load_meal_data(url):
     except Exception:
         return None
 
-# 근무조 계산 함수
+# 근무조 계산
 def get_work_shift(target_date):
     anchor = datetime(2026, 3, 13).date()
     diff = (target_date - anchor).days
@@ -55,7 +55,7 @@ def get_default_meal():
 if 'selected_meal' not in st.session_state:
     st.session_state.selected_meal = get_default_meal()
 
-# 3. 모바일 가로 배치 강제 스타일 (CSS)
+# 3. [핵심 수정] 모바일 가로 1/5 강제 배분 스타일
 st.markdown("""
 <style>
     .block-container { padding: 1rem 0.5rem !important; max-width: 500px !important; }
@@ -67,31 +67,35 @@ st.markdown("""
     .nav-bar { display: flex; width: 100%; background: white; border: 1px solid #D1D9E6; border-radius: 0 0 10px 10px; margin-bottom: 20px; }
     .nav-btn { flex: 1; text-align: center; padding: 10px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 13px; border-right: 1px solid #F0F0F0; }
     
-    /* [핵심] 모바일 가로 고정 레이아웃 */
-    [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important; /* 줄바꿈 절대 금지 */
-        align-items: flex-end !important;
-    }
-    [data-testid="column"] {
-        flex: 1 1 0% !important;
+    /* [수정] 모바일에서 컬럼 너비를 20%로 강제 고정 */
+    div[data-testid="column"] {
+        flex: 1 1 20% !important; /* 5개이므로 20% */
+        width: 20% !important;    /* 너비 강제 고정 */
         min-width: 0px !important;
         padding: 0 1px !important;
+    }
+    
+    /* 컬럼 부모 컨테이너 가로 정렬 */
+    div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: flex-end !important;
+        width: 100% !important;
     }
     
     button { 
         border-radius: 10px 10px 0 0 !important; 
         height: 42px !important; 
         font-weight: 800 !important; 
-        font-size: 11px !important; /* 5개 메뉴를 위해 폰트 소폭 축소 */
+        font-size: 11px !important; 
         border: 1px solid #D1D9E6 !important;
         border-bottom: none !important;
         margin-bottom: -1px !important;
         white-space: nowrap !important;
+        width: 100% !important;
     }
 
-    /* 카드 디자인 */
     .menu-card { 
         border-top: 6px solid var(--c); 
         border-radius: 0 0 15px 15px; 
@@ -128,14 +132,13 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 5. 고유 컬러 탭 버튼 (가로 배치 고정)
+# 5. 고유 컬러 탭 버튼 (1/5 너비 적용)
 color_theme = {"조식": "#E95444", "간편식": "#F1A33B", "중식": "#8BC34A", "석식": "#4A90E2", "야식": "#9C27B0"}
 cols = st.columns(len(color_theme))
 
 for i, (m, color) in enumerate(color_theme.items()):
     is_selected = (st.session_state.selected_meal == m)
     
-    # f-string 오류 방지를 위해 {{ }} 사용
     btn_style = f"""
     <style>
         div[data-testid="column"]:nth-child({i+1}) button {{
