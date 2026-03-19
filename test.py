@@ -9,7 +9,7 @@ def get_now(): return datetime.now(KST)
 
 st.set_page_config(page_title="성의교정 식단 가이드", page_icon="🍴", layout="centered")
 
-# [데이터 로딩] 캐싱 적용 및 오류 방지
+# [데이터 로딩] 캐싱 적용
 @st.cache_data(ttl=600)
 def load_meal_data(url):
     try:
@@ -55,42 +55,59 @@ def get_default_meal():
 if 'selected_meal' not in st.session_state:
     st.session_state.selected_meal = get_default_meal()
 
-# 3. 공통 스타일 정의 (f-string이 아니므로 단일 중괄호 사용 가능)
+# 3. 모바일 가로 배치 강제 스타일 (CSS)
 st.markdown("""
 <style>
-    .block-container { padding: 1rem 1.2rem !important; max-width: 500px !important; }
+    .block-container { padding: 1rem 0.5rem !important; max-width: 500px !important; }
     header { visibility: hidden; }
-    .date-box { text-align: center; background: #F8FAFF; padding: 15px 10px 8px; border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none; }
-    .res-sub-title { font-size: 19px !important; font-weight: 800; color: #333; }
-    .nav-bar { display: flex; width: 100%; background: white; border: 1px solid #D1D9E6; border-radius: 0 0 10px 10px; margin-bottom: 25px; }
-    .nav-btn { flex: 1; text-align: center; padding: 12px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 14px; border-right: 1px solid #F0F0F0; }
     
-    /* 가로 탭 레이아웃 */
-    div[data-testid="column"] { flex: 1 1 0% !important; min-width: 0px !important; padding: 0 1px !important; }
+    /* 날짜 및 네비게이션 */
+    .date-box { text-align: center; background: #F8FAFF; padding: 15px 10px 8px; border-radius: 12px 12px 0 0; border: 1px solid #D1D9E6; border-bottom: none; }
+    .res-sub-title { font-size: 18px !important; font-weight: 800; color: #333; }
+    .nav-bar { display: flex; width: 100%; background: white; border: 1px solid #D1D9E6; border-radius: 0 0 10px 10px; margin-bottom: 20px; }
+    .nav-btn { flex: 1; text-align: center; padding: 10px 0; text-decoration: none; color: #1E3A5F; font-weight: bold; font-size: 13px; border-right: 1px solid #F0F0F0; }
+    
+    /* [핵심] 모바일 가로 고정 레이아웃 */
+    [data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important; /* 줄바꿈 절대 금지 */
+        align-items: flex-end !important;
+    }
+    [data-testid="column"] {
+        flex: 1 1 0% !important;
+        min-width: 0px !important;
+        padding: 0 1px !important;
+    }
+    
     button { 
         border-radius: 10px 10px 0 0 !important; 
         height: 42px !important; 
         font-weight: 800 !important; 
-        font-size: 13px !important;
+        font-size: 11px !important; /* 5개 메뉴를 위해 폰트 소폭 축소 */
         border: 1px solid #D1D9E6 !important;
         border-bottom: none !important;
-        margin-bottom: -5px !important;
+        margin-bottom: -1px !important;
+        white-space: nowrap !important;
     }
+
+    /* 카드 디자인 */
     .menu-card { 
         border-top: 6px solid var(--c); 
         border-radius: 0 0 15px 15px; 
-        padding: 35px 15px; 
+        padding: 30px 15px; 
         text-align: center; 
         background: white; 
         box-shadow: 0 8px 20px rgba(0,0,0,0.08); 
-        margin-top: -1px;
+        position: relative;
+        z-index: 10;
     }
-    .msg-box { text-align: center; background: #f8f9fa; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: bold; color: #555; margin-top: 20px; }
+    .msg-box { text-align: center; background: #f8f9fa; padding: 10px; border-radius: 12px; font-size: 13px; font-weight: bold; color: #666; margin-top: 15px; }
 </style>
 """, unsafe_allow_html=True)
 
 # 헤더
-st.markdown('<div style="text-align:center; padding-bottom:10px;"><span style="font-size:28px; font-weight:800; color:#1E3A5F;">🍴 성의교정 주간 식단</span></div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; padding-bottom:5px;"><span style="font-size:26px; font-weight:800; color:#1E3A5F;">🍴 성의교정 주간 식단</span></div>', unsafe_allow_html=True)
 
 # 4. 날짜 네비게이션
 d = st.session_state.target_date
@@ -111,21 +128,21 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# 5. 고유 컬러 탭 버튼 (f-string 내 {{ }} 중괄호 수정 완료)
+# 5. 고유 컬러 탭 버튼 (가로 배치 고정)
 color_theme = {"조식": "#E95444", "간편식": "#F1A33B", "중식": "#8BC34A", "석식": "#4A90E2", "야식": "#9C27B0"}
 cols = st.columns(len(color_theme))
 
 for i, (m, color) in enumerate(color_theme.items()):
     is_selected = (st.session_state.selected_meal == m)
     
-    # CSS 주입 부분에서 {{ }}를 사용하여 f-string 문법 오류 해결
+    # f-string 오류 방지를 위해 {{ }} 사용
     btn_style = f"""
     <style>
         div[data-testid="column"]:nth-child({i+1}) button {{
             background-color: {color if is_selected else "#f8f9fa"} !important;
             color: {"white" if is_selected else "#666"} !important;
             border-color: {color if is_selected else "#D1D9E6"} !important;
-            opacity: {1 if is_selected else 0.6} !important;
+            opacity: {1 if is_selected else 0.5} !important;
         }}
     </style>
     """
@@ -144,10 +161,10 @@ if meal_data:
 
     st.markdown(f"""
         <div class="menu-card" style="--c: {sel_color};">
-            <div style="font-size: 16px; font-weight: bold; color: {sel_color}; margin-bottom: 10px;">{st.session_state.selected_meal}</div>
-            <div style="font-size: 24px; font-weight: 800; color: #111; margin-bottom: 15px; line-height: 1.3;">{meal_info['menu']}</div>
+            <div style="font-size: 15px; font-weight: bold; color: {sel_color}; margin-bottom: 8px;">{st.session_state.selected_meal}</div>
+            <div style="font-size: 22px; font-weight: 800; color: #111; margin-bottom: 15px; line-height: 1.3;">{meal_info['menu']}</div>
             <div style="height: 1px; background: #eee; width: 40%; margin: 0 auto;"></div>
-            <div style="color: #555; font-size: 16px; margin-top: 20px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
+            <div style="color: #555; font-size: 15px; margin-top: 18px; line-height: 1.6; word-break: keep-all;">{meal_info['side']}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -158,7 +175,6 @@ if st.session_state.selected_meal in meal_times:
     s_t, e_t = meal_times[st.session_state.selected_meal]
     t_dt_s = datetime.combine(d, s_t).replace(tzinfo=KST)
     t_dt_e = datetime.combine(d, e_t).replace(tzinfo=KST)
-
     if d == curr_date:
         if now < t_dt_s:
             diff = t_dt_s - now
