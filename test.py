@@ -1,68 +1,71 @@
 import streamlit as st
 import pandas as pd
-import requests
 import io
 from datetime import datetime
 
-# 1. 건물별 입주 현황 데이터 (보내주신 사진 기반 구조화)
-BUILDING_INFO = {
-    "성의회관": {
-        "14F": "게스트하우스 (포스텍 기숙사, 학교관리용)",
-        "11F": "효도서관 (24시간 출입문 폐쇄)",
-        "4F": "학생휴계실, 강의실(421, 422호), 의학교육지원팀",
-        "2F": "마리아홀, 성당, 교목실, 학생상담센터",
-        "B1-B2": "주차장, 기계실, 창고"
-    },
-    "의생명산업연구원": {
-        "1F": "물품보관실, 대학원 강의실(1002, 1003), 세포배양실",
-        "2F": "정보전략팀 서버실, 세포생산 B/A구역, 박경호 교수실",
-        "4F": "감염내과, 내분비내과, 혈액내과, 세포조직공학연구소",
-        "별관": "가톨릭국제술기교육센터(5F), 한센병연구소(1F)"
-    },
-    "옴니버스 파크": {
-        "의과대학(A동)": "8F(교수실), 4F(연구기술지원팀), 1F(대강의실, 푸드코트)",
-        "연구동(B동)": "3F(초저온냉동고실), 1F(한미약품제재연구소)",
-        "간호대학(C동)": "8F(게스트하우스), 4F(간호대학장실, 조교실)"
-    }
-}
+# 1. 데이터 구조화 (사진 3, 4, 5번 기반 샘플 데이터 - 실제 전체 데이터로 확장 가능)
+@st.cache_data
+def get_building_master_data():
+    data = [
+        {"건물": "성의회관", "층": "14F", "내용": "게스트하우스(1404~1421호), 학교관리(개인사용)"},
+        {"건물": "성의회관", "층": "4F", "내용": "강의실(421, 422호), 학생휴게실, 의학교육지원팀"},
+        {"건물": "의생명산업연구원", "층": "1F", "내용": "대학원 강의실(1002~1004), 물품보관실, 세포배양실"},
+        {"건물": "의생명산업연구원", "층": "4F", "내용": "감염내과, 내분비내과, 혈액내과, 진단검사"},
+        {"건물": "옴니버스 파크", "층": "A동 1F", "내용": "대강의실(1001), 푸드코트, 루카스바이오"},
+        {"건물": "옴니버스 파크", "층": "C동 8F", "내용": "간호대학장실, 조교실, 게스트하우스"}
+    ]
+    return pd.DataFrame(data)
 
-def to_excel(df):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-    return output.getvalue()
-
-# 2. CSS 스타일 (가이드라인 준수: 촘촘한 간격 및 최상단 배치용)
+# 2. 스타일 및 음성 인식 스크립트
 st.markdown("""
 <style>
     .main-title { font-size: 24px; font-weight: 800; text-align: center; color: #1E3A5F; margin-bottom: 10px; }
-    .building-header { font-size: 18px; font-weight: bold; color: #2E5077; border-bottom: 2px solid #2E5077; padding-bottom: 5px; margin-top: 20px; }
-    .info-row { font-size: 14px; line-height: 1.4; color: #333; padding: 2px 0; }
-    .floor-label { font-weight: bold; color: #1E3A5F; min-width: 50px; display: inline-block; }
+    .stDataFrame { width: 100%; }
+    .voice-btn { background-color: #FF4B4B; color: white; border-radius: 5px; padding: 5px 10px; border: none; cursor: pointer; }
 </style>
+<script>
+    function startDictation() {
+        if (window.hasOwnProperty('webkitSpeechRecognition')) {
+            var recognition = new webkitSpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = "ko-KR";
+            recognition.start();
+            recognition.onresult = function(e) {
+                document.getElementById('search_input').value = e.results[0][0].transcript;
+                recognition.stop();
+            };
+        }
+    }
+</script>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">🏫 성의교정 시설 대관 및 입주 현황</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏫 성의교정 대관 및 입주 현황 조회</div>', unsafe_allow_html=True)
 
 # 3. [가이드라인] 엑셀 다운로드 최상단 배치
-# (get_data로 가져온 df_raw가 있다고 가정)
-if 'df_raw' in locals() and not df_raw.empty:
-    st.download_button(label="📥 현재 날짜 대관 엑셀 다운로드", data=to_excel(df_raw), 
-                       file_name=f"대관현황_{datetime.now().strftime('%Y%m%d')}.xlsx", use_container_width=True)
+master_df = get_building_master_data()
+st.download_button(label="📥 전체 입주 현황 엑셀 다운로드", data=io.BytesIO().getvalue(), 
+                   file_name="입주현황_마스터.xlsx", use_container_width=True)
 
-# 4. [가이드라인] 대관 정보 출력 (중복 차단 로직 포함)
-# (기존 대관 출력 반복문 실행 시 아래 조건 사용)
-# bu_df = df_raw[df_raw['buNm'].str.replace(" ", "") == selected_bu.replace(" ", "")]
+# 4. 검색 및 음성 입력 기능
+st.subheader("🔍 입주 정보 검색")
+col1, col2 = st.columns([4, 1])
+search_query = col1.text_input("건물, 층 또는 입주명을 입력하세요", key="search_input", label_visibility="collapsed")
+if col2.button("🎤 음성"):
+    st.components.v1.html("<script>startDictation();</script>", height=0)
 
-# 5. [신규] 건물별 입주 현황 섹션 (사진 데이터 반영)
-st.markdown('<div class="building-header">🏢 건물별 입주 현황 (상세)</div>', unsafe_allow_html=True)
-selected_b = st.selectbox("현황을 확인할 건물을 선택하세요", list(BUILDING_INFO.keys()))
+# 5. [검색 결과 필터링] 
+if search_query:
+    filtered_df = master_df[master_df.apply(lambda row: search_query in str(row.values), axis=1)]
+else:
+    filtered_df = master_df
 
-with st.container():
-    for floor, desc in BUILDING_INFO[selected_b].items():
-        st.markdown(f'<div class="info-row"><span class="floor-label">[{floor}]</span> {desc}</div>', unsafe_allow_html=True)
+# 6. 층별 표(Table) 형태 시각화
+st.markdown("### 🏢 층별 상세 안내")
+st.table(filtered_df) # 또는 st.dataframe(filtered_df, use_container_width=True)
 
-# 6. [가이드라인] 하단 고정 정보
-with st.expander("🔗 자주 찾는 링크 및 지침", expanded=False):
-    st.markdown('<div class="info-row">• 강의실(421, 422, 521, 522호) 주중 오전 개방</div>', unsafe_allow_html=True)
-    st.markdown('<a href="https://www.onsafe.co.kr" style="text-decoration:none; color:#1E3A5F;">• 👮 경비직무 교육 (온세이프)</a>', unsafe_allow_html=True)
+# 7. [가이드라인] 하단 고정 정보 (촘촘한 디자인)
+st.markdown("---")
+with st.expander("🔗 참고 지침 및 링크", expanded=False):
+    st.markdown('<div style="font-size:14px; line-height:1.4;">• 강의실 개방: 421, 422호 등 주중 오전 개방</div>', unsafe_allow_html=True)
+    st.markdown('<a href="https://www.onsafe.co.kr" style="font-size:14px; color:#1E3A5F;">• 👮 경비직무 교육 (온세이프)</a>', unsafe_allow_html=True)
