@@ -3,3 +3,8 @@ requests
 pandas
 xlsxwriter
 fpdf
+streamlit
+pandas
+requests
+pytz
+xlsxwriter
