@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta
 import pytz
 import io
 
-# 1. 페이지 설정 및 디자인 (A형 카드 스타일)
+# 1. 페이지 설정 및 디자인 (A형 카드 스타일 유지)
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -41,26 +41,25 @@ def get_shift(target_date):
     diff = (target_date - anchor).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# --- [중요] 서식 있는 엑셀 생성 함수 ---
+# --- [원본 서식 유지 + 행사명 기간 추가] 엑셀 생성 함수 ---
 def create_styled_excel(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('대관현황보고')
         
-        # 엑셀 서식 정의
+        # 엑셀 서식 설정
         title_fmt = workbook.add_format({'bold': True, 'font_size': 16, 'align': 'center', 'font_color': '#1E3A5F'})
         date_fmt = workbook.add_format({'bold': True, 'bg_color': '#343A40', 'font_color': 'white', 'border': 1})
         head_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'border': 1, 'align': 'center'})
-        cell_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_size': 10})
-        period_cell_fmt = workbook.add_format({'border': 1, 'align': 'center', 'font_size': 9, 'font_color': '#2E5077', 'bg_color': '#F9F9F9'})
+        cell_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'font_size': 10, 'text_wrap': True})
 
         # 컬럼 너비 설정
         worksheet.set_column('A:A', 15) # 장소
         worksheet.set_column('B:B', 15) # 시간
-        worksheet.set_column('C:C', 35) # 행사명
+        worksheet.set_column('C:C', 45) # 행사명 (정보 추가 대비 넓게 설정)
         worksheet.set_column('D:D', 20) # 부서
-        worksheet.set_column('E:E', 30) # 비고(기간정보)
+        worksheet.set_column('E:E', 10) # 상태
 
         row = 0
         worksheet.merge_range('A1:E1', "🏫 성의교정 시설 대관 현황 보고서", title_fmt)
@@ -75,11 +74,15 @@ def create_styled_excel(df, selected_bu):
                 b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
                 if not b_df.empty:
                     worksheet.write(row, 0, f"🏢 {bu}", head_fmt)
-                    worksheet.write_row(row, 1, ["시간", "행사명", "부서", "대관유형/기간"], head_fmt)
+                    worksheet.write_row(row, 1, ["시간", "행사명", "부서", "상태"], head_fmt)
                     row += 1
                     for _, r in b_df.sort_values(['구분', '시간'], ascending=[False, True]).iterrows():
-                        p_info = f"[{r['구분']}] {r['상세기간']}" if r['구분'] == '기간' else "[당일]"
-                        worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], p_info], cell_fmt)
+                        # [핵심] 기간 대관인 경우 행사명 셀에 기간 정보 추가
+                        event_display = r['행사명']
+                        if r['구분'] == '기간':
+                            event_display = f"{r['행사명']}\n(기간: {r['상세기간']} / {r['요일']})"
+                        
+                        worksheet.write_row(row, 0, [r['장소'], r['시간'], event_display, r['부서'], r['상태']], cell_fmt)
                         row += 1
             row += 1 # 날짜간 간격
             
@@ -115,7 +118,7 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows)
     except: return pd.DataFrame()
 
-# --- 화면 구성 ---
+# --- 메인 화면 ---
 st.markdown('<div class="main-title">🏫 성의교정 시설 대관 현황</div>', unsafe_allow_html=True)
 
 with st.expander("🔍 조회 및 다운로드 설정", expanded=True):
@@ -131,7 +134,6 @@ with st.expander("🔍 조회 및 다운로드 설정", expanded=True):
         if not df.empty:
             c1, c2 = st.columns(2)
             c1.download_button("📄 CSV 다운", df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig'), f"대관_{s_date}.csv", use_container_width=True)
-            # 서식 있는 엑셀 버튼
             c2.download_button("📊 서식 엑셀", create_styled_excel(df, sel_bu), f"대관보고서_{s_date}.xlsx", use_container_width=True)
 
 # --- 출력 로직 ---
@@ -149,12 +151,21 @@ if not df.empty:
                 if view_mode == "가로 표":
                     st.dataframe(b_df[['장소', '시간', '행사명', '부서', '상태']], hide_index=True, use_container_width=True)
                 else:
-                    # A형 카드: 당일/기간 분리
+                    # A형 카드: 당일/기간 분리 레이아웃
                     for tp, label in [('당일', '📌 당일 대관'), ('기간', '🗓️ 기간 대관')]:
                         sub_df = b_df[b_df['구분'] == tp].sort_values('시간')
                         if not sub_df.empty:
                             st.markdown(f'<div class="section-label">{label}</div>', unsafe_allow_html=True)
                             for _, r in sub_df.iterrows():
                                 color = "#2ecc71" if tp == '당일' else "#2196F3"
-                                st.markdown(f'''<div class="mobile-card" style="border-left: 5px solid {color};"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">확정</span></div><div class="row-2"><b>{r["행사명"]}</b> / {r["부서"]}</div>{f'<div class="period-tag">🗓️ {r["상세기간"]} ({r["요일"]})</div>' if tp=='기간' else ''}</div>''', unsafe_allow_html=True)
+                                st.markdown(f'''
+                                    <div class="mobile-card" style="border-left: 5px solid {color};">
+                                        <div class="row-1">
+                                            <span class="loc-text">📍 {r["장소"]}</span>
+                                            <span class="time-text">🕒 {r["시간"]}</span>
+                                            <span class="status-badge">확정</span>
+                                        </div>
+                                        <div class="row-2"><b>{r["행사명"]}</b> / {r["부서"]}</div>
+                                        {f'<div class="period-tag">🗓️ {r["상세기간"]} ({r["요일"]})</div>' if tp=='기간' else ''}
+                                    </div>''', unsafe_allow_html=True)
         curr += timedelta(days=1)
