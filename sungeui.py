@@ -21,7 +21,7 @@ st.markdown("""
     .date-bar:first-of-type { margin-top: 0px; }
     .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 12px 0 6px 0; border-left: 5px solid #1E3A5F; padding-left: 10px; background: #f1f4f9; padding: 5px 10px; }
     
-    /* 카드 스타일 */
+    /* A형 카드 스타일 */
     .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .row-1 { display: flex; align-items: center; white-space: nowrap; width: 100%; }
     .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; flex: 1; overflow: hidden; text-overflow: ellipsis; }
@@ -29,7 +29,6 @@ st.markdown("""
     .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; background-color: #2ecc71; flex-shrink: 0; }
     .row-2 { font-size: 12px; color: #333; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 4px; }
     
-    /* 섹션 라벨 및 기간 정보 */
     .section-label { font-size: 12px; font-weight: bold; color: #666; margin: 10px 0 5px 5px; display: flex; align-items: center; }
     .section-label::before { content: ""; width: 3px; height: 12px; background: #adb5bd; margin-right: 6px; border-radius: 2px; }
     .period-tag { font-size: 11px; color: #2E5077; background: #f0f4f8; padding: 4px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; border: 1px solid #d1d9e6; }
@@ -47,20 +46,24 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# --- 엑셀 생성 함수 (원본 편집 서식 반영 + 행사명 기간 추가) ---
+# --- 1. 원본 규정 준수 엑셀 생성 함수 ---
 def create_excel(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('성의교정대관현황')
+        
+        # 서식 설정
         t_fmt = workbook.add_format({'bold': True, 'size': 16, 'align': 'center', 'valign': 'vcenter'})
         d_fmt = workbook.add_format({'bold': True, 'bg_color': '#3d444b', 'font_color': 'white', 'align': 'center', 'border': 1})
         b_fmt = workbook.add_format({'bold': True, 'bg_color': '#D9E1F2', 'font_color': '#1E3A5F', 'align': 'left', 'border': 1})
         h_fmt = workbook.add_format({'bold': True, 'bg_color': '#F2F2F2', 'align': 'center', 'border': 1})
         c_fmt = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1, 'text_wrap': True})
 
-        widths = [20, 15, 45, 20, 10, 10]
+        # 원본 리스트형 셀 규정 너비 적용
+        widths = [25, 15, 45, 20, 10, 10]
         for i, w in enumerate(widths): worksheet.set_column(i, i, w)
+        
         worksheet.merge_range('A1:F1', "성의교정 대관 현황", t_fmt)
         
         row = 2
@@ -72,11 +75,12 @@ def create_excel(df, selected_bu):
                 if b_df.empty: continue
                 
                 worksheet.merge_range(row, 0, row, 5, f"🏢 {bu} ({len(b_df)}건)", b_fmt); row += 1
-                for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']): worksheet.write(row, col, h, h_fmt)
+                for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']): 
+                    worksheet.write(row, col, h, h_fmt)
                 row += 1
                 
                 for _, r in b_df.sort_values(['is_period', '시간']).iterrows():
-                    # [반영] 기간 대관인 경우 행사명에 기간(요일) 추가
+                    # 기간대관인 경우 행사명 셀에 기간 정보 병합
                     event_nm = r['행사명']
                     if r['is_period']:
                         event_nm = f"{r['행사명']}\n({r['period_range']} / {r['allowed_days']})"
@@ -86,6 +90,17 @@ def create_excel(df, selected_bu):
                     row += 1
                 row += 1
     return output.getvalue()
+
+# --- 2. CSV 생성 함수 (구글 시트/백업용) ---
+def create_csv(df):
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow(['날짜', '요일', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태'])
+    for _, r in df.sort_values(['full_date', '건물명', '시간']).iterrows():
+        t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
+        event_val = f"{r['행사명']} ({r['period_range']})" if r['is_period'] else r['행사명']
+        writer.writerow([r['full_date'], WEEKDAYS[t_dt.isoweekday()], r['건물명'], r['장소'], r['시간'], event_val, r['부서'], r['인원'], r['상태']])
+    return output.getvalue().encode('utf-8-sig')
 
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
@@ -108,17 +123,12 @@ def get_data(start_date, end_date):
                 if start_date <= curr <= end_date:
                     if not allowed or str(curr.isoweekday()) in allowed:
                         rows.append({
-                            'full_date': curr.strftime('%Y-%m-%d'),
-                            'is_period': is_period,
-                            'period_range': p_range,
-                            'allowed_days': d_names,
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
+                            'full_date': curr.strftime('%Y-%m-%d'), 'is_period': is_period,
+                            'period_range': p_range, 'allowed_days': d_names,
+                            '건물명': str(item.get('buNm', '')).strip(), '장소': item.get('placeNm', '') or '-',
                             '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '인원': str(item.get('peopleCount', '0')),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
+                            '행사명': item.get('eventNm', '') or '-', '부서': item.get('mgDeptNm', '') or '-',
+                            '인원': str(item.get('peopleCount', '0')), '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
@@ -127,52 +137,51 @@ def get_data(start_date, end_date):
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 
-# 메인 화면
+# --- 화면 구성 ---
 st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', unsafe_allow_html=True)
 
-with st.expander("🔍 설정 (날짜/건물/다운로드)", expanded=True):
-    c1, c2, c3 = st.columns([1.5, 2, 1])
+with st.expander("🔍 설정 및 다운로드", expanded=True):
+    c1, c2, c3 = st.columns([1.5, 2, 1.2])
     with c1:
-        s_date = st.date_input("시작일", value=now_today)
-        e_date = st.date_input("종료일", value=s_date)
+        s_date = st.date_input("조회 시작일", value=now_today)
+        e_date = st.date_input("조회 종료일", value=s_date)
     with c2:
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
     with c3:
-        view_mode = st.radio("보기", ["세로 카드", "가로 표"], horizontal=True)
+        view_mode = st.radio("보기 유형", ["세로 카드", "가로 표"], horizontal=True)
         df = get_data(s_date, e_date)
         if not df.empty:
-            st.download_button("📥 엑셀(XLSX) 받기", data=create_excel(df, sel_bu), file_name=f"대관현황_{s_date}.xlsx", use_container_width=True)
+            sc1, sc2 = st.columns(2)
+            sc1.download_button("📊 Excel", create_excel(df, sel_bu), f"대관_{s_date}.xlsx", use_container_width=True)
+            sc2.download_button("📄 CSV", create_csv(df), f"대관_{s_date}.csv", use_container_width=True)
 
-# 출력
 if not df.empty:
     curr = s_date
     while curr <= e_date:
         d_str = curr.strftime('%Y-%m-%d')
         day_df = df[df['full_date'] == d_str]
         st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
-        
         for bu in sel_bu:
             b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
             if b_df.empty: continue
-            
             st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
             
             if view_mode == "가로 표":
                 st.dataframe(b_df[['장소', '시간', '행사명', '부서', '인원', '상태']].sort_values('시간'), hide_index=True, use_container_width=True)
             else:
-                # A형 카드 유형: 당일/기간 분리
+                # A형 카드: 당일/기간 섹션 분리
                 d_ev = b_df[~b_df['is_period']].sort_values('시간')
                 p_ev = b_df[b_df['is_period']].sort_values('시간')
                 
                 if not d_ev.empty:
                     st.markdown('<div class="section-label">📌 당일 대관</div>', unsafe_allow_html=True)
                     for _, r in d_ev.iterrows():
-                        st.markdown(f'''<div class="mobile-card" style="border-left:5px solid #2ecc71;"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div></div>''', unsafe_allow_html=True)
+                        st.markdown(f'''<div class="mobile-card" style="border-left:5px solid #2ecc71;"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span></div><div class="row-2"><b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div></div>''', unsafe_allow_html=True)
                 
                 if not p_ev.empty:
                     st.markdown('<div class="section-label">🗓️ 기간 대관</div>', unsafe_allow_html=True)
                     for _, r in p_ev.iterrows():
-                        st.markdown(f'''<div class="mobile-card" style="border-left:5px solid #2196F3;"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div><div class="period-tag">🗓️ {r["period_range"]} ({r["allowed_days"]})</div></div>''', unsafe_allow_html=True)
+                        st.markdown(f'''<div class="mobile-card" style="border-left:5px solid #2196F3;"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span></div><div class="row-2"><b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div><div class="period-tag">🗓️ {r["period_range"]} ({r["allowed_days"]})</div></div>''', unsafe_allow_html=True)
         curr += timedelta(days=1)
 else:
-    st.info("데이터가 없습니다.")
+    st.info("조회된 데이터가 없습니다.")
