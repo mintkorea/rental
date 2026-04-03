@@ -45,7 +45,7 @@ def get_shift(target_date):
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# --- 1. 원본 규정 준수 엑셀 생성 (요일 포함) ---
+# --- 1. 원본 규정 준수 엑셀 생성 ---
 def create_excel(df, selected_bu):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -72,23 +72,25 @@ def create_excel(df, selected_bu):
                 for col, h in enumerate(['장소', '시간', '행사명', '부서', '인원', '상태']): worksheet.write(row, col, h, h_fmt)
                 row += 1
                 for _, r in b_df.sort_values(['is_period', '시간']).iterrows():
-                    # [반영] 기간 대관 행사명 병합 (기간 + 요일)
+                    # 기간 대관 행사명 병합 (기간 + 요일)
                     ev_nm = f"{r['행사명']}\n({r['period_range']} / {r['allowed_days']})" if r['is_period'] else r['행사명']
                     worksheet.write_row(row, 0, [r['장소'], r['시간'], ev_nm, r['부서'], r['인원'], r['상태']], c_fmt)
                     row += 1
                 row += 1
     return output.getvalue()
 
-# --- 2. CSV 생성 (요일 정보 추가 완료) ---
+# --- 2. CSV 생성 (기간/요일 정보 절대 누락 방지) ---
 def create_csv(df):
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-    writer.writerow(['날짜', '근무조', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태'])
+    # 헤더에 대관구분 추가하여 관리 용이성 증대
+    writer.writerow(['날짜', '근무조', '건물명', '장소', '시간', '대관구분', '행사명(상세)', '부서', '인원', '상태'])
     for _, r in df.sort_values(['full_date', '건물명', '시간']).iterrows():
         t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
-        # [반영] CSV 행사명에도 기간과 요일 정보 포함
-        ev_nm = f"{r['행사명']} ({r['period_range']} / {r['allowed_days']})" if r['is_period'] else r['행사명']
-        writer.writerow([r['full_date'], get_shift(t_dt), r['건물명'], r['장소'], r['시간'], ev_nm, r['부서'], r['인원'], r['상태']])
+        # [수정] 행사명에 기간과 요일을 확실히 포함
+        is_p_text = "기간" if r['is_period'] else "당일"
+        ev_nm_detail = f"{r['행사명']} ({r['period_range']} / {r['allowed_days']})" if r['is_period'] else r['행사명']
+        writer.writerow([r['full_date'], get_shift(t_dt), r['건물명'], r['장소'], r['시간'], is_p_text, ev_nm_detail, r['부서'], r['인원'], r['상태']])
     return output.getvalue().encode('utf-8-sig')
 
 @st.cache_data(ttl=60)
@@ -135,8 +137,9 @@ with st.expander("🔍 설정 및 다운로드", expanded=True):
         df = get_data(s_date, e_date)
         if not df.empty:
             sc1, sc2 = st.columns(2)
-            sc1.download_button("📊 Excel", create_excel(df, sel_bu), f"대관_{s_date}.xlsx", use_container_width=True)
-            sc2.download_button("📄 CSV", create_csv(df), f"대관_{s_date}.csv", use_container_width=True)
+            # [수정] 파일명 형식: 성의교정 대관 현황(날짜)
+            sc1.download_button("📊 Excel", create_excel(df, sel_bu), f"성의교정 대관 현황({s_date}).xlsx", use_container_width=True)
+            sc2.download_button("📄 CSV", create_csv(df), f"성의교정 대관 현황({s_date}).csv", use_container_width=True)
 
 if not df.empty:
     curr = s_date
@@ -150,8 +153,8 @@ if not df.empty:
             st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
             
             if view_mode == "가로 표":
-                # [반영] 가로 표 행사명에 기간+요일 정보 결합 및 셀 규정 강제 적용
                 display_df = b_df.copy().sort_values('시간')
+                # 가로 표 행사명에도 기간+요일 확실히 표시
                 display_df['행사명'] = display_df.apply(lambda r: f"{r['행사명']}\n({r['period_range']} / {r['allowed_days']})" if r['is_period'] else r['행사명'], axis=1)
                 st.dataframe(
                     display_df[['장소', '시간', '행사명', '부서', '인원', '상태']],
@@ -166,7 +169,6 @@ if not df.empty:
                     }
                 )
             else:
-                # A형 카드: 당일/기간 섹션 분리 및 요일 정보 포함
                 d_ev = b_df[~b_df['is_period']].sort_values('시간')
                 p_ev = b_df[b_df['is_period']].sort_values('시간')
                 for evs, label, color in [(d_ev, "📌 당일 대관", "#2ecc71"), (p_ev, "🗓️ 기간 대관", "#2196F3")]:
