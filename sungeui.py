@@ -6,7 +6,7 @@ import pytz
 import io
 import csv
 
-# 1. 페이지 설정 및 기존 디자인 CSS 유지
+# 1. 페이지 설정 및 디자인 CSS (기존 스타일 유지 + A형 로직 보완)
 st.set_page_config(page_title="성의교정 대관 현황", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -29,25 +29,36 @@ st.markdown("""
     .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; font-weight: bold; background-color: #2ecc71; flex-shrink: 0; }
     .row-2 { font-size: 12px; color: #333; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 4px; }
     
-    /* A형 섹션 타이틀 추가 */
-    .section-split { font-size: 13px; font-weight: bold; color: #666; margin: 10px 0 5px 5px; display: flex; align-items: center; }
+    /* 섹션 구분 타이틀 */
+    .section-split { font-size: 13px; font-weight: bold; color: #666; margin: 12px 0 6px 5px; display: flex; align-items: center; }
     .section-split::before { content: ""; width: 3px; height: 13px; background: #adb5bd; margin-right: 6px; border-radius: 2px; }
     
-    /* 기간 정보 강조 박스 */
+    /* 기간 정보 박스 */
     .period-info-box { font-size: 11px; color: #2E5077; background: #f8f9ff; padding: 5px 8px; border-radius: 4px; margin-top: 6px; border: 1px solid #d1d9e6; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 기존 로직 함수 ---
+# --- 공통 로직 함수 ---
 def get_weekday_names(codes):
     days = {"1":"월", "2":"화", "3":"수", "4":"목", "5":"금", "6":"토", "7":"일"}
     if not codes: return ""
     return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
 
 def get_shift(target_date):
-    base_date = date(2026, 3, 13)
-    diff = (target_date - base_date).days
+    anchor = date(2026, 3, 13)
+    diff = (target_date - anchor).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
+
+# --- 파일 생성 함수 ---
+def create_csv(df):
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow(['날짜', '요일', '구분', '전체기간', '요일지정', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태'])
+    for _, r in df.sort_values(['full_date', '시간']).iterrows():
+        t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
+        w_day = ["월", "화", "수", "목", "금", "토", "일"][t_dt.weekday()]
+        writer.writerow([r['full_date'], w_day, "기간" if r['is_period'] else "당일", r['period_range'], r['allowed_days'], r['건물명'], r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']])
+    return output.getvalue().encode('utf-8-sig')
 
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
@@ -60,10 +71,9 @@ def get_data(start_date, end_date):
             if not item.get('startDt'): continue
             s_dt = datetime.strptime(item['startDt'], '%Y-%m-%d').date()
             e_dt = datetime.strptime(item['endDt'], '%Y-%m-%d').date()
-            
             is_period = (item['startDt'] != item['endDt'])
-            period_str = f"{item['startDt']} ~ {item['endDt']}"
-            day_names = get_weekday_names(item.get('allowDay', ''))
+            p_range = f"{item['startDt']} ~ {item['endDt']}"
+            d_names = get_weekday_names(item.get('allowDay', ''))
             
             curr = s_dt
             while curr <= e_dt:
@@ -72,16 +82,11 @@ def get_data(start_date, end_date):
                     if not allowed or str(curr.isoweekday()) in allowed:
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'),
-                            'is_period': is_period,
-                            'period_range': period_str,
-                            'allowed_days': day_names,
-                            '건물명': str(item.get('buNm', '')).strip(),
-                            '장소': item.get('placeNm', '') or '-',
+                            'is_period': is_period, 'period_range': p_range, 'allowed_days': d_names,
+                            '건물명': str(item.get('buNm', '')).strip(), '장소': item.get('placeNm', '') or '-',
                             '시간': f"{item.get('startTime', '')}~{item.get('endTime', '')}",
-                            '행사명': item.get('eventNm', '') or '-',
-                            '부서': item.get('mgDeptNm', '') or '-',
-                            '인원': str(item.get('peopleCount', '0')),
-                            '상태': '확정' if item.get('status') == 'Y' else '대기'
+                            '행사명': item.get('eventNm', '') or '-', '부서': item.get('mgDeptNm', '') or '-',
+                            '인원': str(item.get('peopleCount', '0')), '상태': '확정' if item.get('status') == 'Y' else '대기'
                         })
                 curr += timedelta(days=1)
         return pd.DataFrame(rows)
@@ -93,24 +98,23 @@ st.markdown('<div class="main-title">🏫 성의교정 대관 현황</div>', uns
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스 파크 의과대학", "옴니버스 파크 간호대학", "대학본관", "서울성모별관"]
 WEEKDAYS = ["", "월", "화", "수", "목", "금", "토", "일"]
 
-# 상단 설정 바 (기존 유지)
-with st.expander("🔍 조회 설정", expanded=True):
-    c1, c2 = st.columns([1, 2])
+with st.expander("🔍 조회 및 다운로드 설정", expanded=True):
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c1:
         s_date = st.date_input("시작일", value=now_today)
         e_date = st.date_input("종료일", value=s_date)
     with c2:
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
-
-df = get_data(s_date, e_date)
+    with c3:
+        df = get_data(s_date, e_date)
+        if not df.empty:
+            st.download_button("📊 CSV 받기", data=create_csv(df), file_name=f"대관현황_{s_date}.csv", use_container_width=True)
 
 if not df.empty:
     curr = s_date
     while curr <= e_date:
         d_str = curr.strftime('%Y-%m-%d')
         day_df = df[df['full_date'] == d_str]
-        
-        # 날짜 헤더 (기존 스타일)
         st.markdown(f'<div class="date-bar">📅 {d_str} ({WEEKDAYS[curr.isoweekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
         
         for bu in sel_bu:
@@ -118,42 +122,19 @@ if not df.empty:
             if not b_df.empty:
                 st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
                 
-                # A형 핵심: 데이터 분리
-                daily_df = b_df[~b_df['is_period']].sort_values('시간')
-                period_df = b_df[b_df['is_period']].sort_values('시간')
+                # 데이터 분리 (당일/기간)
+                d_ev = b_df[~b_df['is_period']].sort_values('시간')
+                p_ev = b_df[b_df['is_period']].sort_values('시간')
                 
-                # 1. 당일 대관 섹션
-                if not daily_df.empty:
+                if not d_ev.empty:
                     st.markdown('<div class="section-split">📌 당일 대관</div>', unsafe_allow_html=True)
-                    for _, r in daily_df.iterrows():
-                        st.markdown(f'''
-                            <div class="mobile-card" style="border-left: 5px solid #2ecc71;">
-                                <div class="row-1">
-                                    <span class="loc-text">📍 {r["장소"]}</span>
-                                    <span class="time-text">🕒 {r["시간"]}</span>
-                                    <span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span>
-                                </div>
-                                <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                            </div>''', unsafe_allow_html=True)
+                    for _, r in d_ev.iterrows():
+                        st.markdown(f'<div class="mobile-card" style="border-left:5px solid #2ecc71;"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div></div>', unsafe_allow_html=True)
                 
-                # 2. 기간 대관 섹션
-                if not period_df.empty:
+                if not p_ev.empty:
                     st.markdown('<div class="section-split">🗓️ 기간 대관</div>', unsafe_allow_html=True)
-                    for _, r in period_df.iterrows():
-                        st.markdown(f'''
-                            <div class="mobile-card" style="border-left: 5px solid #2196F3;">
-                                <div class="row-1">
-                                    <span class="loc-text">📍 {r["장소"]}</span>
-                                    <span class="time-text">🕒 {r["시간"]}</span>
-                                    <span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span>
-                                </div>
-                                <div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
-                                <div class="period-info-box">
-                                    <b>[기간 정보]</b> {r["period_range"]} ({r["allowed_days"]})
-                                </div>
-                            </div>''', unsafe_allow_html=True)
+                    for _, r in p_ev.iterrows():
+                        st.markdown(f'<div class="mobile-card" style="border-left:5px solid #2196F3;"><div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{"확정" if r["상태"]=="확정" else "대기"}</span></div><div class="row-2">🏷️ <b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div><div class="period-info-box"><b>[기간]</b> {r["period_range"]} ({r["allowed_days"]})</div></div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div style="color:#999; font-size:12px; margin-left:10px;">내역 없음</div>', unsafe_allow_html=True)
         curr += timedelta(days=1)
-else:
-    st.info("조회된 내역이 없습니다.")
