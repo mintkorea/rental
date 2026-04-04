@@ -73,7 +73,7 @@ def get_data(start_date, end_date):
         st.error(f"데이터 추출 실패: {e}")
         return pd.DataFrame()
 
-# --- 구글 시트 업데이트 함수 (누적 및 상세 정보 포함) ---
+# --- 구글 시트 업데이트 함수 (컬럼 불일치 해결 버전) ---
 def update_google_sheet(df):
     if df.empty: return False
     try:
@@ -82,47 +82,58 @@ def update_google_sheet(df):
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
         client = gspread.authorize(creds)
         
-        # 관리자님 구글 시트 ID
         SHEET_KEY = "13P49JFl63lgA7psgGr8QYgutKwcPMIyq0_jjUcc8Fa0"
         sh = client.open_by_key(SHEET_KEY)
         sheet = sh.get_worksheet(0)
         
-        # 1. 헤더 설정 (기간대관 상세 정보 포함)
+        # 1. 정확한 컬럼 순서 정의 (관리자님 요청사항 반영)
         header = ['날짜', '요일', '근무조', '유형', '대관기간', '해당요일', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태']
         
-        # 2. 기존 시트 데이터 읽기 (누적 관리용)
-        existing_data = sheet.get_all_values()
-        if len(existing_data) > 1:
-            existing_df = pd.DataFrame(existing_data[1:], columns=existing_data[0])
+        # 2. 기존 데이터 읽기
+        existing_raw = sheet.get_all_values()
+        if len(existing_raw) > 1:
+            existing_df = pd.DataFrame(existing_raw[1:], columns=existing_raw[0])
+            # 기존 데이터가 다른 컬럼 구조를 가지고 있을 경우를 대비해 헤더에 맞게 재정렬
+            for col in header:
+                if col not in existing_df.columns: existing_df[col] = ""
+            existing_df = existing_df[header]
         else:
             existing_df = pd.DataFrame(columns=header)
 
-        # 3. 신규 데이터 변환
+        # 3. 신규 데이터 포맷팅 (컬럼 순서 엄격 준수)
         new_rows = []
         for _, r in df.iterrows():
             t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
             day_name = ["월", "화", "수", "목", "금", "토", "일"][t_dt.weekday()]
             new_rows.append({
-                '날짜': r['full_date'], '요일': day_name, '근무조': get_shift(t_dt),
+                '날짜': r['full_date'],
+                '요일': day_name,
+                '근무조': get_shift(t_dt),
                 '유형': "기간" if r['is_period'] else "당일",
                 '대관기간': r['period_range'] if r['is_period'] else r['full_date'],
                 '해당요일': r['allowed_days'] if r['is_period'] else day_name,
-                '건물명': r['건물명'], '장소': r['장소'], '시간': r['시간'],
-                '행사명': r['행사명'], '부서': r['부서'], '인원': r['인원'], '상태': r['상태']
+                '건물명': r['건물명'],
+                '장소': r['장소'],
+                '시간': r['시간'],
+                '행사명': r['행사명'],
+                '부서': r['부서'],
+                '인원': r['인원'],
+                '상태': r['상태']
             })
-        new_df = pd.DataFrame(new_rows)
+        new_df = pd.DataFrame(new_rows)[header] # 컬럼 순서 고정
 
-        # 4. 합치기 및 중복 제거 (날짜, 시간, 장소, 행사명 기준)
+        # 4. 합치기 및 중복 제거
         combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
             subset=['날짜', '시간', '장소', '행사명'], keep='last'
         )
         combined_df = combined_df.sort_values(by=['날짜', '시간'])
 
-        # 5. 시트 쓰기 (Z1 에러 방지를 위해 L1 사용)
+        # 5. 시트 쓰기 (열 부족 에러 방지 위해 L1 대신 충분한 범위인 Z1 사용하거나 열 확장 필요)
         final_values = [header] + combined_df.values.tolist()
         sheet.clear()
         sheet.update('A1', final_values)
-        sheet.update('L1', [[datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')]])
+        # 업데이트 시각 기록 (열 인덱스 주의)
+        sheet.update('M1', [[datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')]])
         return True
     except Exception as e:
         st.error(f"구글 시트 전송 오류: {e}")
@@ -142,13 +153,13 @@ with st.expander("🔍 조회 및 수동 관리", expanded=True):
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
     with c3:
         if st.button("🚀 시트 전송 (누적 업데이트)", use_container_width=True, type="primary"):
-            df = get_data(s_date, e_date)
-            if not df.empty and update_google_sheet(df):
-                st.success("기존 데이터 보존 및 신규 데이터 누적 성공!")
+            df_to_save = get_data(s_date, e_date)
+            if not df_to_save.empty and update_google_sheet(df_to_save):
+                st.success("데이터 불일치 해결 및 누적 성공!")
             else:
                 st.warning("전송할 데이터가 없거나 오류가 발생했습니다.")
 
-# 데이터 표시 로직
+# 데이터 표시 로직 (화면용)
 df_view = get_data(s_date, e_date)
 if not df_view.empty:
     curr = s_date
@@ -169,5 +180,3 @@ if not df_view.empty:
                             {f'<div class="period-tag">🗓️ {r["period_range"]} ({r["allowed_days"]})</div>' if r["is_period"] else ""}
                         </div>''', unsafe_allow_html=True)
         curr += timedelta(days=1)
-else:
-    st.info("선택한 기간에 데이터가 없습니다.")
