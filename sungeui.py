@@ -83,7 +83,7 @@ def update_google_sheet(df):
         client = gspread.authorize(creds)
         
         # 관리자님 구글 시트 ID
-        SHEET_KEY = "1vTi4T20_JgmIH8e5kIsaokmfTT0Fz7Ua2MS4YnBPmHoCIqtB0F7WpY00fXDbOifOu7WZEjXJm9iWCUT"
+        SHEET_KEY = "13P49JFl63lgA7psgGr8QYgutKwcPMIyq0_jjUcc8Fa0"
         sh = client.open_by_key(SHEET_KEY)
         sheet = sh.get_worksheet(0)
         
