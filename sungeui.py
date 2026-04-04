@@ -81,7 +81,9 @@ def get_data(start_date, end_date):
 def update_google_sheet(df):
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+       # Streamlit Secrets에서 직접 읽기
+creds_dict = st.secrets["gcp_service_account"]
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
         
         # 관리자님의 구글 시트 고유 ID
