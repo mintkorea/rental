@@ -6,13 +6,27 @@ import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1. 페이지 설정 및 디자인
+# 1. 페이지 설정 및 디자인 CSS (기존 레이아웃 복구)
 st.set_page_config(page_title="성의교정 대관 관리 시스템", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
 
-# CSS 생략 (기존과 동일)
-st.markdown("""<style>...</style>""", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    [data-testid="stSidebar"] { display: none; }
+    header { visibility: hidden; }
+    .main .block-container { max-width: 1200px; margin: 0 auto; padding: 0.5rem 1rem !important; }
+    .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
+    .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 35px; margin-bottom: 12px; font-size: 15px; }
+    .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 12px 0 6px 0; border-left: 5px solid #1E3A5F; padding-left: 10px; background: #f1f4f9; padding: 5px 10px; }
+    .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .row-1 { display: flex; align-items: center; }
+    .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; flex: 1; }
+    .time-text { font-size: 13px; font-weight: 700; color: #e74c3c; margin-left: auto; margin-right: 8px; }
+    .row-2 { font-size: 12px; color: #333; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 4px; }
+    .period-tag { font-size: 11px; color: #2E5077; background: #f0f4f8; padding: 4px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; border: 1px solid #d1d9e6; }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- 공통 함수 ---
 def get_weekday_names(codes):
@@ -21,7 +35,7 @@ def get_weekday_names(codes):
     return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
 
 def get_shift(target_date):
-    # C-조 교대 로직 (2026-03-13 기준 C조)
+    # C-조 교대 로직
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
@@ -46,7 +60,6 @@ def get_data(start_date, end_date):
             while curr <= e_dt:
                 if start_date <= curr <= end_date:
                     if not allowed or str(curr.isoweekday()) in allowed:
-                        # 상태값 추출 보강
                         status_val = '확정' if item.get('status') == 'Y' else '대기'
                         rows.append({
                             'full_date': curr.strftime('%Y-%m-%d'), 'is_period': is_p, 'period_range': p_rng, 'allowed_days': d_nms,
@@ -61,7 +74,7 @@ def get_data(start_date, end_date):
         st.error(f"데이터 추출 실패: {e}")
         return pd.DataFrame()
 
-# --- 구글 시트 업데이트 함수 (기록 위치 변경: O1 셀) ---
+# --- 구글 시트 자동화 함수 ---
 def update_google_sheet(df):
     if df.empty: return False
     try:
@@ -72,16 +85,11 @@ def update_google_sheet(df):
         
         SHEET_KEY = "13P49JFl63lgA7psgGr8QYgutKwcPMIyq0_jjUcc8Fa0"
         sh = client.open_by_key(SHEET_KEY)
+        sheet = sh.worksheet("운영용")
         
-        try:
-            sheet = sh.worksheet("운영용")
-        except:
-            st.error("'운영용' 탭을 찾을 수 없습니다.")
-            return False
-            
         header = ['날짜', '요일', '근무조', '유형', '대관기간', '해당요일', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태']
         
-        # 1. 기존 데이터 로드
+        # 기존 데이터 로드
         existing_raw = sheet.get_all_values()
         if len(existing_raw) > 1:
             existing_df = pd.DataFrame(existing_raw[1:], columns=existing_raw[0])
@@ -89,7 +97,7 @@ def update_google_sheet(df):
         else:
             existing_df = pd.DataFrame(columns=header)
 
-        # 2. 신규 데이터 정리
+        # 신규 데이터 정리
         new_rows = []
         for _, r in df.iterrows():
             t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
@@ -104,48 +112,88 @@ def update_google_sheet(df):
             })
         new_df = pd.DataFrame(new_rows)
 
-        # 3. 병합 및 중복 제거 (최신 '상태' 값 반영을 위해 신규 데이터 우선)
+        # 병합 및 중복 제거 (Keep Last로 최신 상태 유지)
         combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
             subset=['날짜', '시간', '장소', '행사명'], keep='last'
         )
         combined_df = combined_df.sort_values(by=['날짜', '시간'])
 
-        # 4. 시트 쓰기 및 업데이트 시간 기록 위치 변경 (O1 셀)
+        # 시트 쓰기 및 O1 셀 업데이트 시간 기록
         final_values = [header] + combined_df.values.tolist()
-        
-        # 열 개수가 부족할 경우 대비 (O열까지 확장)
-        if sheet.col_count < 15:
-            sheet.add_cols(15 - sheet.col_count)
-            
+        if sheet.col_count < 15: sheet.add_cols(15 - sheet.col_count)
         sheet.clear()
         sheet.update('A1', final_values)
-        
-        # 업데이트 확인 위치를 데이터 영역 밖인 O1으로 변경
-        sheet.update('O1', [[f"최종 동기화: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}"]])
-        
+        sheet.update('O1', [[datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')]])
         return True
     except Exception as e:
-        st.error(f"운영용 전송 오류: {e}")
+        st.error(f"구글 시트 자동화 오류: {e}")
         return False
 
-# --- 메인 실행 ---
-st.title("🏫 성의교정 대관 관리 도구 (25년 11월~)")
+# --- 자동 업데이트 로직 (7일 주기) ---
+def check_and_auto_update():
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds_info = st.secrets["gcp_service_account"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        client = gspread.authorize(creds)
+        sh = client.open_by_key("13P49JFl63lgA7psgGr8QYgutKwcPMIyq0_jjUcc8Fa0")
+        sheet = sh.worksheet("운영용")
+        
+        last_update_str = sheet.acell('O1').value
+        if last_update_str:
+            last_update = datetime.strptime(last_update_str, '%Y-%m-%d %H:%M:%S')
+            if datetime.now(KST) - last_update.replace(tzinfo=KST) > timedelta(days=7):
+                df_auto = get_data(date(2025, 11, 1), date(2026, 12, 31))
+                update_google_sheet(df_auto)
+        else:
+            # 기록이 없으면 최초 실행
+            df_init = get_data(date(2025, 11, 1), date(2026, 12, 31))
+            update_google_sheet(df_init)
+    except:
+        pass
 
-with st.container():
-    st.info("2025년 11월부터의 모든 자료를 추출하여 운영용 시트의 누락된 상태 값을 보정합니다.")
-    c1, c2 = st.columns([2, 1])
+# 시작 시 자동 업데이트 체크
+check_and_auto_update()
+
+# --- UI 레이아웃 시작 ---
+st.markdown('<div class="main-title">🏫 성의교정 대관 관리 시스템</div>', unsafe_allow_html=True)
+
+BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
+
+# 사이드바 대신 상단 컨트롤바 (모바일 최적화)
+with st.expander("🔍 조회 및 수동 동기화", expanded=False):
+    c1, c2, c3 = st.columns([1.5, 2, 1.2])
     with c1:
-        # 조회 시작일을 2025년 11월 1일로 설정
-        sel_range = st.date_input("조회 및 보정 기간", [date(2025, 11, 1), date(2026, 12, 31)])
+        s_date = st.date_input("조회 시작", value=now_today)
+        e_date = st.date_input("조회 종료", value=s_date + timedelta(days=7))
     with c2:
-        if st.button("🚀 운영용 시트 전체 동기화", use_container_width=True, type="primary"):
-            with st.spinner("과거 데이터를 포함하여 보정 중입니다..."):
-                df_all = get_data(sel_range[0], sel_range[1])
-                if update_google_sheet(df_all):
-                    st.success("25년 11월 이후 모든 데이터 보정 및 업데이트 완료!")
+        sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원", "옴니버스 파크"])
+    with c3:
+        if st.button("🚀 수동 전체 동기화", use_container_width=True, type="primary"):
+            df_manual = get_data(date(2025, 11, 1), date(2026, 12, 31))
+            if update_google_sheet(df_manual):
+                st.success("25년 11월~현재 자료 동기화 완료!")
 
-# 데이터 미리보기
-df_view = get_data(now_today, now_today + timedelta(days=7))
+# 데이터 표시 (모바일 카드 레이아웃)
+df_view = get_data(s_date, e_date)
 if not df_view.empty:
-    st.write("### 📅 오늘 이후 대관 요약")
-    st.dataframe(df_view[['full_date', '건물명', '장소', '시간', '행사명', '상태']], use_container_width=True)
+    curr = s_date
+    while curr <= e_date:
+        d_str = curr.strftime('%Y-%m-%d')
+        day_df = df_view[df_view['full_date'] == d_str]
+        if not day_df.empty:
+            st.markdown(f'<div class="date-bar">📅 {d_str} ({"월화수목금토일"[curr.weekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
+            for bu in sel_bu:
+                b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
+                if b_df.empty: continue
+                st.markdown(f'<div class="bu-header">🏢 {bu}</div>', unsafe_allow_html=True)
+                for _, r in b_df.sort_values('시간').iterrows():
+                    st.markdown(f'''
+                        <div class="mobile-card" style="border-left:5px solid {"#2196F3" if r["is_period"] else "#2ecc71"};">
+                            <div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span></div>
+                            <div class="row-2"><b>{r["행사명"]}</b> / {r["부서"]} (상태: {r["상태"]})</div>
+                            {f'<div class="period-tag">🗓️ {r["period_range"]} ({r["allowed_days"]})</div>' if r["is_period"] else ""}
+                        </div>''', unsafe_allow_html=True)
+        curr += timedelta(days=1)
+else:
+    st.info("선택한 기간에 대관 데이터가 없습니다.")
