@@ -7,7 +7,7 @@ import io
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1. 페이지 설정 및 디자인 CSS (기존 유지)
+# 1. 페이지 설정 및 디자인 CSS
 st.set_page_config(page_title="성의교정 대관 관리 시스템", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -24,12 +24,15 @@ st.markdown("""
     .row-1 { display: flex; align-items: center; }
     .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; flex: 1; }
     .time-text { font-size: 13px; font-weight: 700; color: #e74c3c; margin-left: auto; margin-right: 8px; }
+    .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; background-color: #2ecc71; }
     .row-2 { font-size: 12px; color: #333; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 4px; }
     .period-tag { font-size: 11px; color: #2E5077; background: #f0f4f8; padding: 4px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; border: 1px solid #d1d9e6; }
+    .section-label { font-size: 12px; font-weight: bold; color: #666; margin: 10px 0 5px 5px; display: flex; align-items: center; }
+    .section-label::before { content: ""; width: 3px; height: 12px; background: #adb5bd; margin-right: 6px; border-radius: 2px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- [수정] 구글 시트 업데이트 및 O1 셀 기록 로직 ---
+# --- 구글 시트 업데이트 함수 (O1 셀 기록 포함) ---
 def update_google_sheet(df):
     if df.empty: return False
     try:
@@ -37,42 +40,30 @@ def update_google_sheet(df):
         creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client = gspread.authorize(creds)
         
+        # 관리자님 시트 ID
         SHEET_KEY = "1vTi4T20_JgmIH8e5kIsaokmfTT0Fz7Ua2MS4YnBPmHoCIqtB0F7WpY00fXDbOifOu7WZEjXJm9iWCUT"
         sh = client.open_by_key(SHEET_KEY)
-        sheet = sh.get_worksheet(0) # 첫 번째 탭
+        sheet = sh.get_worksheet(0)
         
-        header = ['날짜', '요일', '근무조', '유형', '대관기간', '해당요일', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태']
+        header = ['날짜', '요일', '근무조', '유형', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태']
+        values = [header]
         
-        # 기존 데이터 로드 및 병합 (중복 방지)
-        existing_raw = sheet.get_all_values()
-        existing_df = pd.DataFrame(existing_raw[1:], columns=existing_raw[0]) if len(existing_raw) > 1 else pd.DataFrame(columns=header)
-        
-        new_rows = []
-        for _, r in df.iterrows():
+        for _, r in df.sort_values(['full_date', '시간']).iterrows():
             t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
-            new_rows.append([
-                r['full_date'], "월화수목금토일"[t_dt.weekday()], get_shift(t_dt),
-                "기간" if r['is_period'] else "당일", r['period_range'], r['allowed_days'],
-                r['건물명'], r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']
+            values.append([
+                r['full_date'], "월화수목금토일"[t_dt.weekday()], get_shift(t_dt), 
+                "기간" if r['is_period'] else "당일", r['건물명'], r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']
             ])
-        new_df = pd.DataFrame(new_rows, columns=header)
-        
-        combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['날짜', '시간', '장소', '행사명'], keep='last')
-        combined_df = combined_df.sort_values(['날짜', '시간'])
-        
-        # 시트 업데이트
-        final_values = [header] + combined_df.values.tolist()
+            
         sheet.clear()
-        sheet.update('A1', final_values)
-        
-        # O1 셀에 마지막 업데이트 시각 기록 (자동화 확인용)
+        sheet.update('A1', values)
         sheet.update('O1', [[f"Last Sync: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}"]])
         return True
     except Exception as e:
-        st.error(f"구글 시트 연동 오류: {e}")
+        st.error(f"시트 연동 오류: {e}")
         return False
 
-# --- 기존 공통 함수 및 데이터 로직 (유지) ---
+# --- 공통 함수 및 데이터 로직 ---
 def get_weekday_names(codes):
     days = {"1":"월", "2":"화", "3":"수", "4":"목", "5":"금", "6":"토", "7":"일"}
     return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
@@ -109,10 +100,9 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows).drop_duplicates() if rows else pd.DataFrame()
     except: return pd.DataFrame()
 
-# --- [기존 소스 유지] 엑셀 생성 함수 ---
+# --- 엑셀 생성 (기존 서식 유지) ---
 def create_excel(df, selected_bu):
     output = io.BytesIO()
-    # (관리자님이 주신 기존 엑셀 서식 코드 그대로 유지)
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         workbook = writer.book
         worksheet = workbook.add_worksheet('성의교정대관현황')
@@ -146,25 +136,51 @@ def create_excel(df, selected_bu):
                 row += 1
     return output.getvalue()
 
-# --- 화면 구성 및 필터 (기존 건물 목록 유지) ---
+# --- 화면 구성 및 필터 ---
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-st.markdown('<div class="main-title">🏫 성의교정 대관 관리 시스템</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황 관리자</div>', unsafe_allow_html=True)
 
 with st.expander("🔍 조회 및 데이터 관리", expanded=True):
     c1, c2, c3 = st.columns([1.5, 2, 1.2])
     with c1:
         s_date = st.date_input("조회 시작일", value=now_today)
-        e_date = st.date_input("조회 종료일", value=s_date + timedelta(days=7))
+        e_date = st.date_input("조회 종료일", value=s_date)
     with c2:
-        sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원", "옴니버스 파크"])
+        sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
     with c3:
+        view_mode = st.radio("보기 유형", ["세로 카드", "가로 표"], horizontal=True) # 가로/세로 선택 복구
         df = get_data(s_date, e_date)
         if not df.empty:
-            st.download_button("📊 Excel 다운로드", create_excel(df, sel_bu), f"대관현황_{s_date}.xlsx", use_container_width=True)
-            if st.button("🚀 운영용 시트 동기화", use_container_width=True, type="primary"):
-                # 2025년 11월부터 전체 데이터 갱신
-                full_sync_df = get_data(date(2025, 11, 1), date(2026, 12, 31))
-                if update_google_sheet(full_sync_df): st.success("✅ O1 셀 기록 및 동기화 완료!")
+            st.download_button("📊 Excel", create_excel(df, sel_bu), f"대관현황_{s_date}.xlsx", use_container_width=True)
+            if st.button("🚀 시트 동기화", use_container_width=True, type="primary"):
+                if update_google_sheet(df): st.success("✅ 시트 및 O1 셀 업데이트 완료!")
 
-# (하단 카드 레이아웃 표시부 생략 - 기존 소스 그대로 사용하시면 됩니다)
+# --- 데이터 표시부 (가로/세로 모드 로직 반영) ---
+if not df.empty:
+    curr = s_date
+    while curr <= e_date:
+        d_str = curr.strftime('%Y-%m-%d')
+        day_df = df[df['full_date'] == d_str]
+        if not day_df.empty:
+            st.markdown(f'<div class="date-bar">📅 {d_str} ({"월화수목금토일"[curr.weekday()]}요일) | {get_shift(curr)}</div>', unsafe_allow_html=True)
+            for bu in sel_bu:
+                b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
+                if b_df.empty: continue
+                st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
+                
+                if view_mode == "가로 표":
+                    display_df = b_df.copy().sort_values('시간')
+                    st.dataframe(display_df[['장소', '시간', '행사명', '부서', '인원', '상태']], hide_index=True, use_container_width=True)
+                else: # 세로 카드 (기존 모바일 레이아웃)
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        color = "#2196F3" if r["is_period"] else "#2ecc71"
+                        st.markdown(f'''
+                            <div class="mobile-card" style="border-left:5px solid {color};">
+                                <div class="row-1"><span class="loc-text">📍 {r["장소"]}</span><span class="time-text">🕒 {r["시간"]}</span><span class="status-badge">{r["상태"]}</span></div>
+                                <div class="row-2"><b>{r["행사명"]}</b> / {r["부서"]} ({r["인원"]}명)</div>
+                                {f'<div class="period-tag">🗓️ {r["period_range"]} ({r["allowed_days"]})</div>' if r["is_period"] else ""}
+                            </div>''', unsafe_allow_html=True)
+        curr += timedelta(days=1)
+else:
+    st.info("조회된 데이터가 없습니다.")
