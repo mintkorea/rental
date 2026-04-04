@@ -7,7 +7,7 @@ import io
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# 1. 페이지 설정 및 디자인 CSS
+# 1. 페이지 설정 및 디자인 CSS (표 레이아웃 보강)
 st.set_page_config(page_title="성의교정 대관 관리 시스템", page_icon="🏫", layout="wide")
 KST = pytz.timezone('Asia/Seoul')
 now_today = datetime.now(KST).date()
@@ -20,15 +20,21 @@ st.markdown("""
     .main-title { font-size: 22px; font-weight: bold; color: #1E3A5F; text-align: center; margin-bottom: 10px; }
     .date-bar { background-color: #343a40; color: white; padding: 10px; border-radius: 6px; text-align: center; font-weight: bold; margin-top: 35px; margin-bottom: 12px; font-size: 15px; }
     .bu-header { font-size: 17px; font-weight: bold; color: #1E3A5F; margin: 12px 0 6px 0; border-left: 5px solid #1E3A5F; padding-left: 10px; background: #f1f4f9; padding: 5px 10px; }
+    
+    /* 가로 표 전용 스타일 (셀 너비 고정) */
+    .custom-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13px; table-layout: fixed; }
+    .custom-table th { background: #f8f9fa; border: 1px solid #dee2e6; padding: 8px; text-align: center; color: #495057; }
+    .custom-table td { border: 1px solid #dee2e6; padding: 8px; text-align: center; vertical-align: middle; word-break: break-all; }
+    .event-cell { text-align: left !important; }
+    .period-info { font-size: 11px; color: #2196F3; margin-top: 4px; display: block; font-weight: normal; }
+    
+    /* 세로 카드 스타일 */
     .mobile-card { background: white; border: 1px solid #eef0f2; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
     .row-1 { display: flex; align-items: center; }
     .loc-text { font-size: 14px; font-weight: 800; color: #1E3A5F; flex: 1; }
     .time-text { font-size: 13px; font-weight: 700; color: #e74c3c; margin-left: auto; margin-right: 8px; }
     .status-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; color: white; background-color: #2ecc71; }
     .row-2 { font-size: 12px; color: #333; border-top: 1px solid #f8f9fa; padding-top: 6px; margin-top: 4px; }
-    .period-tag { font-size: 11px; color: #2E5077; background: #f0f4f8; padding: 4px 8px; border-radius: 4px; margin-top: 5px; display: inline-block; border: 1px solid #d1d9e6; }
-    .section-label { font-size: 12px; font-weight: bold; color: #666; margin: 10px 0 5px 5px; display: flex; align-items: center; }
-    .section-label::before { content: ""; width: 3px; height: 12px; background: #adb5bd; margin-right: 6px; border-radius: 2px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -40,7 +46,6 @@ def update_google_sheet(df):
         creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client = gspread.authorize(creds)
         
-        # 관리자님 시트 ID
         SHEET_KEY = "1vTi4T20_JgmIH8e5kIsaokmfTT0Fz7Ua2MS4YnBPmHoCIqtB0F7WpY00fXDbOifOu7WZEjXJm9iWCUT"
         sh = client.open_by_key(SHEET_KEY)
         sheet = sh.get_worksheet(0)
@@ -149,14 +154,14 @@ with st.expander("🔍 조회 및 데이터 관리", expanded=True):
     with c2:
         sel_bu = st.multiselect("건물 선택", options=BUILDING_ORDER, default=["성의회관", "의생명산업연구원"])
     with c3:
-        view_mode = st.radio("보기 유형", ["세로 카드", "가로 표"], horizontal=True) # 가로/세로 선택 복구
+        view_mode = st.radio("보기 유형", ["세로 카드", "가로 표"], horizontal=True)
         df = get_data(s_date, e_date)
         if not df.empty:
             st.download_button("📊 Excel", create_excel(df, sel_bu), f"대관현황_{s_date}.xlsx", use_container_width=True)
             if st.button("🚀 시트 동기화", use_container_width=True, type="primary"):
-                if update_google_sheet(df): st.success("✅ 시트 및 O1 셀 업데이트 완료!")
+                if update_google_sheet(df): st.success("✅ 시트 동기화 완료!")
 
-# --- 데이터 표시부 (가로/세로 모드 로직 반영) ---
+# --- 데이터 표시부 (가로 표 디자인 보강) ---
 if not df.empty:
     curr = s_date
     while curr <= e_date:
@@ -170,9 +175,36 @@ if not df.empty:
                 st.markdown(f'<div class="bu-header">🏢 {bu} ({len(b_df)}건)</div>', unsafe_allow_html=True)
                 
                 if view_mode == "가로 표":
-                    display_df = b_df.copy().sort_values('시간')
-                    st.dataframe(display_df[['장소', '시간', '행사명', '부서', '인원', '상태']], hide_index=True, use_container_width=True)
-                else: # 세로 카드 (기존 모바일 레이아웃)
+                    # HTML 테이블로 열 너비 고정하여 가독성 확보
+                    table_html = f"""
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">장소</th>
+                                <th style="width: 12%;">시간</th>
+                                <th style="width: 38%;">행사명</th>
+                                <th style="width: 15%;">부서</th>
+                                <th style="width: 10%;">인원</th>
+                                <th style="width: 10%;">상태</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                    """
+                    for _, r in b_df.sort_values('시간').iterrows():
+                        period_tag = f'<span class="period-info">🗓️ {r["period_range"]} ({r["allowed_days"]})</span>' if r["is_period"] else ""
+                        table_html += f"""
+                            <tr>
+                                <td>{r['장소']}</td>
+                                <td style="color:#e74c3c; font-weight:bold;">{r['시간']}</td>
+                                <td class="event-cell"><b>{r['행사명']}</b>{period_tag}</td>
+                                <td>{r['부서']}</td>
+                                <td>{r['인원']}명</td>
+                                <td><span style="color:{"#2ecc71" if r['상태']=="확정" else "#f39c12"}; font-weight:bold;">{r['상태']}</span></td>
+                            </tr>
+                        """
+                    table_html += "</tbody></table>"
+                    st.markdown(table_html, unsafe_allow_html=True)
+                else: 
                     for _, r in b_df.sort_values('시간').iterrows():
                         color = "#2196F3" if r["is_period"] else "#2ecc71"
                         st.markdown(f'''
