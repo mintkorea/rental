@@ -46,23 +46,28 @@ def get_weekday_names(codes):
     return ",".join([days.get(c.strip(), "") for c in str(codes).split(",") if c.strip() in days])
 
 def get_shift(target_date):
+    # 기준일로부터 순환하는 근무조 계산
     base_date = date(2026, 3, 13)
     diff = (target_date - base_date).days
     return f"{['A', 'B', 'C'][diff % 3]}조"
 
-# --- 2. 구글 시트 연동 (스크린샷 A~M열 양식 준수) ---
+# --- 2. 구글 시트 연동 (Secrets 기반 인증 및 스크린샷 양식 적용) ---
 def update_google_sheet(df):
     if df.empty: return False
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        # credentials.json 파일이 같은 경로에 있어야 함
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-        client = gspread.authorize(creds)
-        SHEET_KEY = "1vTi4T20_JgmIH8e5kIsaokmfTT0Fz7Ua2MS4YnBPmHoCIqtB0F7WpY00fXDbOifOu7WZEjXJm9iWCUT"
-        sh = client.open_by_key(SHEET_KEY)
-        sheet = sh.get_worksheet(0)
         
-        # 스크린샷과 동일한 헤더 구성
+        # [수정 핵심] 파일 대신 Streamlit Secrets에 등록된 정보를 직접 사용합니다.
+        creds_info = st.secrets["gcp_service_account"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        
+        client = gspread.authorize(creds)
+        # 관리자님의 구글 시트 ID
+        SHEET_KEY = "13P49JFl63lgA7psgGr8QYgutKwcPMIyq0_jjUcc8Fa0"
+        sh = client.open_by_key(SHEET_KEY)
+        sheet = sh.worksheet("운영용") # 시트 이름이 '운영용'인지 확인 필요
+        
+        # 스크린샷 양식과 동일한 헤더 (A~M열)
         header = ['날짜', '요일', '근무조', '유형', '대관기간', '해당요일', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태']
         values = [header]
         
@@ -85,15 +90,20 @@ def update_google_sheet(df):
             ]
             values.append(row)
             
+        # 데이터 업데이트
         sheet.clear()
         sheet.update('A1', values)
-        sheet.update('O1', [[f"Last Sync: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}"]])
+        
+        # N1 셀 주변에 최종 동기화 기록 (스크린샷 위치 참고)
+        sync_time = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        sheet.update('M1', [[f"최종 동기화: {sync_time}"]]) # M1 또는 O1 등 비어있는 곳에 기록
+        
         return True
     except Exception as e:
         st.error(f"시트 연동 오류: {e}")
         return False
 
-# --- 3. 데이터 로직 ---
+# --- 3. 데이터 로직 (웹 크롤링) ---
 @st.cache_data(ttl=60)
 def get_data(start_date, end_date):
     url = "https://songeui.catholic.ac.kr/ko/service/application-for-rental_calendar.do"
@@ -131,39 +141,10 @@ def get_data(start_date, end_date):
         return pd.DataFrame(rows).drop_duplicates() if rows else pd.DataFrame()
     except: return pd.DataFrame()
 
-# --- 4. CSV/Excel 파일 생성 ---
-def create_excel(df, selected_bu):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        workbook = writer.book
-        worksheet = workbook.add_worksheet('현황')
-        t_fmt = workbook.add_format({'bold': True, 'size': 14, 'align': 'center'})
-        h_fmt = workbook.add_format({'bold': True, 'bg_color': '#f2f2f2', 'border': 1, 'align': 'center'})
-        c_fmt = workbook.add_format({'border': 1, 'align': 'center', 'valign': 'vcenter', 'text_wrap': True})
-        
-        worksheet.merge_range('A1:F1', "성의교정 대관 현황", t_fmt)
-        row = 2
-        for d_str in sorted(df['full_date'].unique()):
-            day_df = df[df['full_date'] == d_str]
-            worksheet.write(row, 0, f"📅 {d_str}", h_fmt); row += 1
-            for bu in BUILDING_ORDER:
-                if bu not in selected_bu: continue
-                b_df = day_df[day_df['건물명'].str.replace(" ","") == bu.replace(" ","")]
-                if b_df.empty: continue
-                worksheet.write(row, 0, f"🏢 {bu}", workbook.add_format({'bold':True})); row += 1
-                cols = ['장소', '시간', '행사명', '부서', '인원', '상태']
-                for i, c in enumerate(cols): worksheet.write(row, i, c, h_fmt)
-                row += 1
-                for _, r in b_df.sort_values('시간').iterrows():
-                    worksheet.write_row(row, 0, [r['장소'], r['시간'], r['행사명'], r['부서'], r['인원'], r['상태']], c_fmt)
-                    row += 1
-                row += 1
-    return output.getvalue()
-
+# --- 4. CSV 파일 생성 ---
 def create_csv(df):
     output = io.StringIO()
     writer = csv.writer(output, quoting=csv.QUOTE_ALL)
-    # 스크린샷 양식 헤더
     writer.writerow(['날짜', '요일', '근무조', '유형', '대관기간', '해당요일', '건물명', '장소', '시간', '행사명', '부서', '인원', '상태'])
     for _, r in df.sort_values(['full_date', '시간']).iterrows():
         t_dt = datetime.strptime(r['full_date'], '%Y-%m-%d').date()
@@ -175,10 +156,10 @@ def create_csv(df):
         ])
     return output.getvalue().encode('utf-8-sig')
 
-# --- 5. 메인 화면 구성 ---
+# --- 5. 화면 구성 ---
 BUILDING_ORDER = ["성의회관", "의생명산업연구원", "옴니버스 파크", "옴니버스파크 의과대학", "옴니버스파크 간호대학", "대학본관", "서울성모별관"]
 
-st.markdown('<div class="main-title">🏫 성의교정 대관 관리자</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🏫 성의교정 대관 현황 관리자</div>', unsafe_allow_html=True)
 
 with st.expander("🔍 데이터 관리 및 조회", expanded=True):
     c1, c2, c3 = st.columns([1.5, 2, 1.2])
@@ -192,10 +173,10 @@ with st.expander("🔍 데이터 관리 및 조회", expanded=True):
         df = get_data(s_date, e_date)
         if not df.empty:
             if st.button("🚀 구글 시트 동기화", use_container_width=True, type="primary"):
-                if update_google_sheet(df): st.success("✅ 동기화 완료!")
+                if update_google_sheet(df): st.success("✅ 운영용 시트 동기화 완료!")
             st.download_button("📄 CSV 다운로드", create_csv(df), f"대관현황_{s_date}.csv", use_container_width=True)
 
-# 데이터 출력 부분
+# 데이터 출력
 if not df.empty:
     curr = s_date
     while curr <= e_date:
